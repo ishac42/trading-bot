@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
+import { api } from '@/services/api'
 import type { Trade, TradeFilters, TradeStats } from '@/types'
 import { mockTrades, getBotName } from '@/mocks/dashboardData'
 
-const USE_MOCK = true
+const USE_MOCK = false
 
 /**
  * Compute trade statistics from a set of trades
@@ -186,9 +187,15 @@ export const useTradeStats = (filters: TradeFilters) => {
         const filtered = applyFilters(mockTrades, filters)
         return computeTradeStats(filtered)
       }
-      // When backend is available, replace with API call
-      const response = await fetch('/api/trades/stats')
-      return response.json()
+      const response = await api.getTradeStats({
+        dateRange: filters.dateRange,
+        customStartDate: filters.customStartDate,
+        customEndDate: filters.customEndDate,
+        botId: filters.botId,
+        symbol: filters.symbol,
+        type: filters.type,
+      })
+      return response.data
     },
     staleTime: 1000 * 30,
   })

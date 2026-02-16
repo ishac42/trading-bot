@@ -77,6 +77,7 @@ export const api = {
   // Trades
   getTrades: (params?: any) => apiClient.get('/trades', { params }),
   getTrade: (id: string) => apiClient.get(`/trades/${id}`),
+  getTradeStats: (params?: any) => apiClient.get('/trades/stats', { params }),
 
   // Positions
   getPositions: (params?: any) => apiClient.get('/positions', { params }),
