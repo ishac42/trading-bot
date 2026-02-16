@@ -2,6 +2,9 @@ import { io, Socket } from 'socket.io-client'
 
 const WS_URL = import.meta.env.VITE_WS_URL || 'http://localhost:8000'
 
+// Set to true once the backend socket.io server is implemented (Phase 8)
+const WS_ENABLED = false
+
 export type WebSocketEvent =
   | 'trade_executed'
   | 'position_updated'
@@ -18,7 +21,13 @@ class WebSocketService {
   private reconnectDelay = 1000
 
   connect(): void {
-    if (this.socket?.connected) {
+    if (!WS_ENABLED) {
+      return
+    }
+
+    // Don't create a new socket if one already exists (even if disconnected —
+    // socket.io-client handles reconnection internally).
+    if (this.socket) {
       return
     }
 
