@@ -3,7 +3,7 @@ import { api } from '@/services/api'
 import type { Position } from '@/types'
 import { mockPositions } from '@/mocks/dashboardData'
 
-const USE_MOCK = true // Toggle to false when backend is available
+const USE_MOCK = false // Backend is available (Sprint 3)
 
 export interface PositionFilters {
   botId?: string

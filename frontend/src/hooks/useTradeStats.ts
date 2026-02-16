@@ -3,7 +3,7 @@ import { api } from '@/services/api'
 import type { Trade, TradeFilters, TradeStats } from '@/types'
 import { mockTrades, getBotName } from '@/mocks/dashboardData'
 
-const USE_MOCK = false
+const USE_MOCK = false // Backend is available
 
 /**
  * Compute trade statistics from a set of trades

@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { api } from '@/services/api'
 import type {
   AnalyticsData,
   AnalyticsOverview,
@@ -10,7 +11,7 @@ import type {
 } from '@/types'
 import { mockTrades, mockBots, getBotName } from '@/mocks/dashboardData'
 
-const USE_MOCK = true
+const USE_MOCK = false // Backend is available
 
 /**
  * Compute comprehensive analytics from trades and bots
@@ -386,9 +387,10 @@ export const useAnalytics = (timeRange: AnalyticsTimeRange = 'ALL') => {
         await new Promise((resolve) => setTimeout(resolve, 300))
         return computeAnalytics(mockTrades, timeRange)
       }
-      // When backend is available, replace with API call
-      const response = await fetch('/api/analytics')
-      return response.json()
+      // Fetch all trades from backend and compute analytics client-side
+      const response = await api.getTrades({ page: 1, pageSize: 99999 })
+      const trades: Trade[] = response.data.trades
+      return computeAnalytics(trades, timeRange)
     },
     staleTime: 1000 * 30,
   })

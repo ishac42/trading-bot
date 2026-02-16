@@ -87,4 +87,7 @@ export const api = {
   // Market Data
   getMarketStatus: () => apiClient.get('/market-status'),
   getMarketData: (symbol: string) => apiClient.get(`/market-data/${symbol}`),
+
+  // Dashboard Summary
+  getSummaryStats: () => apiClient.get('/summary'),
 }

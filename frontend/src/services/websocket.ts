@@ -1,6 +1,6 @@
 import { io, Socket } from 'socket.io-client'
 
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws'
+const WS_URL = import.meta.env.VITE_WS_URL || 'http://localhost:8000'
 
 // Set to true once the backend socket.io server is implemented (Phase 8)
 const WS_ENABLED = false
@@ -32,7 +32,8 @@ class WebSocketService {
     }
 
     this.socket = io(WS_URL, {
-      transports: ['websocket'],
+      path: '/ws/',
+      transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionDelay: this.reconnectDelay,
       reconnectionAttempts: this.maxReconnectAttempts,

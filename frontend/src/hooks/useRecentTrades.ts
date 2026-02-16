@@ -3,7 +3,7 @@ import { api } from '@/services/api'
 import type { Trade } from '@/types'
 import { mockTrades } from '@/mocks/dashboardData'
 
-const USE_MOCK = false // Toggle to false when backend is available
+const USE_MOCK = false // Backend is available
 
 /**
  * Hook to fetch recent trades (for Dashboard)
@@ -25,10 +25,9 @@ export const useRecentTrades = (limit: number = 10) => {
           .slice(0, limit)
       }
       const response = await api.getTrades({
+        pageSize: limit,
         sortField: 'timestamp',
         sortDirection: 'desc',
-        page: 1,
-        pageSize: limit,
       })
       return response.data.trades
     },
