@@ -571,6 +571,7 @@ trading-bot/
 ├── docker-compose.yml
 ├── Plans/
 │   ├── ARCHITECTURE.md
+│   ├── BACKEND_IMPLEMENTATION_PLAN.md
 │   ├── SYSTEM_ARCHITECTURE_DIAGRAMS.md
 │   └── ARCHITECTURE_DIAGRAMS.html
 └── README.md
