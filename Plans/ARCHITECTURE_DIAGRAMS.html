@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Bot System Architecture Diagrams</title>
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ 
+            startOnLoad: true,
+            theme: 'default',
+            themeVariables: {
+                primaryColor: '#4a90e2',
+                primaryTextColor: '#fff',
+                primaryBorderColor: '#357abd',
+                lineColor: '#333',
+                secondaryColor: '#f0f0f0',
+                tertiaryColor: '#e8e8e8'
+            }
+        });
+    </script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #4a90e2;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #555;
+            margin-top: 40px;
+            padding: 10px;
+            background-color: #e8e8e8;
+            border-left: 4px solid #4a90e2;
+        }
+        .diagram-container {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .mermaid {
+            text-align: center;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #4a90e2;
+            color: white;
+        }
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+        code {
+            background-color: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        .note {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🏗️ Trading Bot System Architecture - Visual Diagrams</h1>
+    
+    <div class="note">
+        <strong>📌 Maintenance Note:</strong> These diagrams must stay synchronized with <code>ARCHITECTURE.md</code> and <code>SYSTEM_ARCHITECTURE_DIAGRAMS.md</code>. 
+        See <code>ARCHITECTURE_MAINTENANCE.md</code> for sync guidelines. All diagrams are interactive. 
+        If diagrams don't load, check your internet connection (they load from CDN).
+    </div>
+
+    <h2>1. High-Level System Architecture</h2>
+    <div class="diagram-container">
+        <div class="mermaid">
+graph TB
+    subgraph "Frontend Layer"
+        UI[React Frontend<br/>TypeScript + MUI]
+        Pages[Dashboard<br/>Bot Config<br/>Trade History<br/>Analytics]
+        WSClient[WebSocket Client<br/>socket.io-client]
+    end
+
+    subgraph "Backend Layer"
+        API[FastAPI Backend<br/>Python 3.11+]
+        Routers[API Routers<br/>Bots, Trades, Market Data]
+        Engine[Trading Engine<br/>Core Logic]
+        Calc[Indicator Calculator<br/>pandas-ta]
+        Signal[Signal Generator]
+        Risk[Risk Manager]
+        Exec[Order Executor]
+    end
+
+    subgraph "Data Layer"
+        DB[(PostgreSQL<br/>Database)]
+        Redis[(Redis<br/>Cache/Queue)]
+    end
+
+    subgraph "External Services"
+        Alpaca[Alpaca Trade API<br/>REST + WebSocket]
+        Market[Market Data<br/>Real-time Streams]
+    end
+
+    UI -->|HTTP REST| API
+    UI -->|WebSocket| WSClient
+    WSClient <-->|socket.io| API
+    Pages --> UI
+    
+    API --> Routers
+    Routers --> Engine
+    Engine --> Calc
+    Engine --> Signal
+    Engine --> Risk
+    Engine --> Exec
+    
+    API -->|SQLAlchemy| DB
+    API -->|Cache| Redis
+    Exec -->|REST API| Alpaca
+    Engine -->|WebSocket| Market
+    Market -->|Price Updates| Alpaca
+    Alpaca -->|Trade Confirmations| Engine
+    
+    Engine -->|Real-time Events| WSClient
+    Exec -->|Log Trades| DB
+    Engine -->|Cache Data| Redis
+        </div>
+    </div>
+
+    <h2>2. Component Interaction Flow</h2>
+    <div class="diagram-container">
+        <div class="mermaid">
+sequenceDiagram
+    participant User
+    participant Frontend
+    participant FastAPI
+    participant TradingEngine
+    participant AlpacaAPI
+    participant PostgreSQL
+    participant WebSocket
+
+    Note over User,WebSocket: Bot Configuration Flow
+    User->>Frontend: Create/Edit Bot
+    Frontend->>FastAPI: POST /api/bots
+    FastAPI->>PostgreSQL: Save Bot Config
+    PostgreSQL-->>FastAPI: Confirmation
+    FastAPI-->>Frontend: Bot Created
+    Frontend-->>User: Success Message
+
+    Note over User,WebSocket: Start Bot Flow
+    User->>Frontend: Start Bot
+    Frontend->>FastAPI: POST /api/bots/{id}/start
+    FastAPI->>TradingEngine: Initialize Bot
+    TradingEngine->>PostgreSQL: Load Bot Config
+    TradingEngine->>AlpacaAPI: Subscribe to Market Data
+    FastAPI-->>Frontend: Bot Started
+    FastAPI->>WebSocket: Emit bot_status_changed
+    WebSocket-->>Frontend: Real-time Update
+
+    Note over User,WebSocket: Trading Flow (Every trading_frequency seconds)
+    AlpacaAPI->>TradingEngine: Price Update
+    TradingEngine->>TradingEngine: Calculate Indicators
+    TradingEngine->>TradingEngine: Generate Signal
+    TradingEngine->>TradingEngine: Risk Check
+    TradingEngine->>AlpacaAPI: Execute Order
+    AlpacaAPI-->>TradingEngine: Order Confirmation
+    TradingEngine->>PostgreSQL: Log Trade
+    TradingEngine->>WebSocket: Emit trade_executed
+    WebSocket-->>Frontend: Real-time Update
+    Frontend-->>User: Dashboard Updates
+
+    Note over User,WebSocket: View Data Flow
+    User->>Frontend: View Dashboard/Trades
+    Frontend->>FastAPI: GET /api/trades
+    FastAPI->>PostgreSQL: Query Trades
+    PostgreSQL-->>FastAPI: Trade Data
+    FastAPI-->>Frontend: JSON Response
+    Frontend-->>User: Display Data
+        </div>
+    </div>
+
+    <h2>3. Trading Engine Internal Architecture</h2>
+    <div class="diagram-container">
+        <div class="mermaid">
+graph LR
+    subgraph "Trading Engine Core"
+        Main[TradingEngine<br/>Main Orchestrator]
+        Scheduler[Market Hours<br/>Monitor]
+        Subscriber[Data Subscriber<br/>Alpaca WebSocket]
+    end
+
+    subgraph "Signal Processing"
+        Calc[IndicatorCalculator<br/>pandas-ta]
+        Signal[SignalGenerator<br/>Buy/Sell Logic]
+    end
+
+    subgraph "Risk Management"
+        Risk[RiskManager]
+        Position[Position Sizing]
+        StopLoss[Stop-Loss Check]
+        DailyLoss[Daily Loss Limit]
+    end
+
+    subgraph "Execution"
+        Exec[OrderExecutor<br/>Alpaca API]
+        Logger[Trade Logger]
+    end
+
+    subgraph "Data Storage"
+        DB[(PostgreSQL)]
+        Cache[(Redis)]
+    end
+
+    subgraph "Real-time Updates"
+        WS[WebSocket<br/>Broadcaster]
+    end
+
+    Main --> Scheduler
+    Scheduler --> Subscriber
+    Subscriber --> Calc
+    Calc --> Signal
+    Signal --> Risk
+    Risk --> Position
+    Risk --> StopLoss
+    Risk --> DailyLoss
+    Risk --> Exec
+    Exec --> Logger
+    Exec --> WS
+    Logger --> DB
+    Main --> Cache
+    WS --> Frontend[Frontend UI]
+        </div>
+    </div>
+
+    <h2>4. Data Flow Diagram</h2>
+    <div class="diagram-container">
+        <div class="mermaid">
+flowchart TD
+    subgraph "User Actions"
+        Create[Create Bot]
+        Start[Start Bot]
+        View[View Dashboard]
+    end
+
+    subgraph "Frontend (React)"
+        UI[React Components]
+        Query[TanStack Query]
+        WS[WebSocket Client]
+    end
+
+    subgraph "Backend API (FastAPI)"
+        BotRouter[/api/bots]
+        TradeRouter[/api/trades]
+        MarketRouter[/api/market-data]
+        WSEndpoint[/ws]
+    end
+
+    subgraph "Trading Engine"
+        Engine[Trading Engine]
+        Indicators[Calculate Indicators]
+        Signals[Generate Signals]
+        RiskCheck[Risk Management]
+    end
+
+    subgraph "External"
+        AlpacaREST[Alpaca REST API]
+        AlpacaWS[Alpaca WebSocket]
+    end
+
+    subgraph "Storage"
+        Postgres[(PostgreSQL)]
+        RedisCache[(Redis)]
+    end
+
+    Create --> UI
+    Start --> UI
+    View --> UI
+    
+    UI --> Query
+    UI --> WS
+    
+    Query -->|HTTP| BotRouter
+    Query -->|HTTP| TradeRouter
+    Query -->|HTTP| MarketRouter
+    
+    WS -->|socket.io| WSEndpoint
+    
+    BotRouter --> Postgres
+    TradeRouter --> Postgres
+    MarketRouter --> RedisCache
+    
+    BotRouter -->|Start Command| Engine
+    Engine -->|Subscribe| AlpacaWS
+    AlpacaWS -->|Price Data| Engine
+    Engine --> Indicators
+    Indicators --> Signals
+    Signals --> RiskCheck
+    RiskCheck -->|Execute| AlpacaREST
+    AlpacaREST -->|Confirmation| Engine
+    Engine -->|Log| Postgres
+    Engine -->|Cache| RedisCache
+    Engine -->|Broadcast| WSEndpoint
+    WSEndpoint -->|Real-time| WS
+    WS -->|Update| UI
+        </div>
+    </div>
+
+    <h2>5. Database Schema Relationships</h2>
+    <div class="diagram-container">
+        <div class="mermaid">
+erDiagram
+    BOTS ||--o{ TRADES : "has"
+    BOTS ||--o{ POSITIONS : "has"
+    
+    BOTS {
+        string id PK
+        string name
+        string status
+        decimal capital
+        int trading_frequency
+        json indicators
+        json risk_management
+        json symbols
+        int start_hour
+        int start_minute
+        int end_hour
+        int end_minute
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    TRADES {
+        string id PK
+        string bot_id FK
+        string symbol
+        string type
+        int quantity
+        decimal price
+        timestamp timestamp
+        json indicators_snapshot
+        decimal profit_loss
+    }
+    
+    POSITIONS {
+        string id PK
+        string bot_id FK
+        string symbol
+        int quantity
+        decimal entry_price
+        decimal current_price
+        decimal stop_loss_price
+        decimal take_profit_price
+        decimal unrealized_pnl
+        decimal realized_pnl
+        timestamp opened_at
+        timestamp closed_at
+        boolean is_open
+    }
+        </div>
+    </div>
+
+    <h2>6. Technology Stack Layers</h2>
+    <div class="diagram-container">
+        <div class="mermaid">
+graph TB
+    subgraph "Presentation Layer"
+        React[React 18+<br/>TypeScript]
+        MUI[Material-UI<br/>Components]
+        Charts[TradingView Charts<br/>Recharts]
+    end
+
+    subgraph "State & Communication"
+        Query[TanStack Query<br/>State Management]
+        Router[React Router<br/>Navigation]
+        WSClient[socket.io-client<br/>WebSocket]
+        Axios[Axios<br/>HTTP Client]
+    end
+
+    subgraph "API Layer"
+        FastAPI[FastAPI<br/>Python 3.11+]
+        Pydantic[Pydantic<br/>Validation]
+        Routers[API Routers<br/>REST Endpoints]
+    end
+
+    subgraph "Business Logic"
+        Engine[Trading Engine]
+        Indicators[pandas-ta<br/>Technical Indicators]
+        Risk[Risk Manager]
+        Signals[Signal Generator]
+    end
+
+    subgraph "Data Access"
+        SQLAlchemy[SQLAlchemy<br/>ORM]
+        Alembic[Alembic<br/>Migrations]
+    end
+
+    subgraph "Data Storage"
+        PostgreSQL[(PostgreSQL<br/>Database)]
+        Redis[(Redis<br/>Cache)]
+    end
+
+    subgraph "External APIs"
+        AlpacaREST[Alpaca REST API<br/>Order Execution]
+        AlpacaWS[Alpaca WebSocket<br/>Market Data]
+    end
+
+    React --> MUI
+    React --> Charts
+    React --> Query
+    React --> Router
+    Query --> Axios
+    Query --> WSClient
+    
+    Axios --> FastAPI
+    WSClient --> FastAPI
+    
+    FastAPI --> Pydantic
+    FastAPI --> Routers
+    Routers --> Engine
+    Engine --> Indicators
+    Engine --> Risk
+    Engine --> Signals
+    
+    Routers --> SQLAlchemy
+    SQLAlchemy --> Alembic
+    SQLAlchemy --> PostgreSQL
+    Engine --> Redis
+    
+    Engine --> AlpacaREST
+    Engine --> AlpacaWS
+        </div>
+    </div>
+
+    <h2>7. Real-time Data Flow</h2>
+    <div class="diagram-container">
+        <div class="mermaid">
+graph LR
+    subgraph "Market Data Source"
+        Alpaca[Alpaca Market Data<br/>WebSocket Stream]
+    end
+
+    subgraph "Backend Processing"
+        Subscriber[WebSocket Subscriber]
+        Engine[Trading Engine]
+        Calculator[Indicator Calculator]
+        SignalGen[Signal Generator]
+        Executor[Order Executor]
+    end
+
+    subgraph "Backend Storage & Broadcast"
+        DB[(PostgreSQL)]
+        Cache[(Redis)]
+        WSBroadcast[WebSocket Broadcaster]
+    end
+
+    subgraph "Frontend Updates"
+        WSClient[WebSocket Client]
+        Query[React Query]
+        UI[React UI]
+    end
+
+    Alpaca -->|Price Updates| Subscriber
+    Subscriber --> Engine
+    Engine --> Calculator
+    Calculator --> SignalGen
+    SignalGen --> Executor
+    Executor -->|Execute Trade| Alpaca
+    Executor --> DB
+    Executor --> Cache
+    Executor --> WSBroadcast
+    
+    WSBroadcast -->|socket.io| WSClient
+    WSClient --> Query
+    Query --> UI
+    
+    Alpaca -->|Trade Confirmation| Executor
+    Executor --> WSBroadcast
+        </div>
+    </div>
+
+    <h2>8. Deployment Architecture</h2>
+    <div class="diagram-container">
+        <div class="mermaid">
+graph TB
+    subgraph "Client"
+        Browser[Web Browser]
+    end
+
+    subgraph "Frontend Container"
+        ReactApp[React App<br/>Vite Build]
+        Nginx[Nginx<br/>Static Server]
+    end
+
+    subgraph "Backend Container"
+        FastAPIApp[FastAPI App<br/>Uvicorn]
+    end
+
+    subgraph "Database Container"
+        PostgresDB[(PostgreSQL<br/>Database)]
+    end
+
+    subgraph "Cache Container"
+        RedisCache[(Redis<br/>Cache)]
+    end
+
+    subgraph "External Services"
+        AlpacaAPI[Alpaca API<br/>Cloud Service]
+    end
+
+    Browser -->|HTTPS| Nginx
+    Nginx --> ReactApp
+    ReactApp -->|HTTP/WS| FastAPIApp
+    FastAPIApp --> PostgresDB
+    FastAPIApp --> RedisCache
+    FastAPIApp -->|REST/WS| AlpacaAPI
+        </div>
+    </div>
+
+    <h2>9. Trading Logic Flow (Detailed)</h2>
+    <div class="diagram-container">
+        <div class="mermaid">
+flowchart TD
+    Start([Market Opens<br/>9:30 AM EST]) --> CheckBots{Active<br/>Bots?}
+    
+    CheckBots -->|No| Wait[Wait for<br/>Active Bots]
+    CheckBots -->|Yes| Loop[For Each Bot]
+    
+    Wait --> CheckBots
+    
+    Loop --> LoadConfig[Load Bot Config<br/>from Database]
+    LoadConfig --> Subscribe[Subscribe to<br/>Market Data]
+    
+    Subscribe --> Timer{Every<br/>trading_frequency<br/>seconds}
+    
+    Timer --> GetPrice[Get Current<br/>Price Data]
+    GetPrice --> CalcIndicators[Calculate<br/>Indicators<br/>RSI, MACD, SMA, etc.]
+    
+    CalcIndicators --> GenerateSignal{Generate<br/>Trading<br/>Signal?}
+    
+    GenerateSignal -->|Buy Signal| CheckRiskBuy[Risk Management<br/>Check]
+    GenerateSignal -->|Sell Signal| CheckRiskSell[Risk Management<br/>Check]
+    GenerateSignal -->|No Signal| Timer
+    
+    CheckRiskBuy --> RiskBuy{Pass<br/>Risk Check?}
+    CheckRiskSell --> RiskSell{Pass<br/>Risk Check?}
+    
+    RiskBuy -->|No| Timer
+    RiskBuy -->|Yes| ExecuteBuy[Execute Buy<br/>Order via Alpaca]
+    
+    RiskSell -->|No| Timer
+    RiskSell -->|Yes| ExecuteSell[Execute Sell<br/>Order via Alpaca]
+    
+    ExecuteBuy --> LogTrade[Log Trade<br/>to Database]
+    ExecuteSell --> LogTrade
+    
+    LogTrade --> Broadcast[Broadcast Update<br/>via WebSocket]
+    Broadcast --> CheckTime{Market<br/>Window<br/>Closed?}
+    
+    CheckTime -->|No| Timer
+    CheckTime -->|Yes 12:00 PM| Stop[Stop Trading]
+    
+    Stop --> End([End])
+        </div>
+    </div>
+
+    <h2>10. Component Communication Matrix</h2>
+    <div class="diagram-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Component</th>
+                    <th>Communicates With</th>
+                    <th>Protocol</th>
+                    <th>Purpose</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>React Frontend</strong></td>
+                    <td>FastAPI Backend</td>
+                    <td>HTTP REST</td>
+                    <td>CRUD operations, data fetching</td>
+                </tr>
+                <tr>
+                    <td><strong>React Frontend</strong></td>
+                    <td>FastAPI Backend</td>
+                    <td>WebSocket (socket.io)</td>
+                    <td>Real-time updates</td>
+                </tr>
+                <tr>
+                    <td><strong>FastAPI Backend</strong></td>
+                    <td>PostgreSQL</td>
+                    <td>SQL (via SQLAlchemy)</td>
+                    <td>Data persistence</td>
+                </tr>
+                <tr>
+                    <td><strong>FastAPI Backend</strong></td>
+                    <td>Redis</td>
+                    <td>Redis Protocol</td>
+                    <td>Caching, pub/sub</td>
+                </tr>
+                <tr>
+                    <td><strong>Trading Engine</strong></td>
+                    <td>Alpaca API</td>
+                    <td>REST API</td>
+                    <td>Order execution</td>
+                </tr>
+                <tr>
+                    <td><strong>Trading Engine</strong></td>
+                    <td>Alpaca API</td>
+                    <td>WebSocket</td>
+                    <td>Market data subscription</td>
+                </tr>
+                <tr>
+                    <td><strong>Trading Engine</strong></td>
+                    <td>PostgreSQL</td>
+                    <td>SQL (via SQLAlchemy)</td>
+                    <td>Trade logging</td>
+                </tr>
+                <tr>
+                    <td><strong>Trading Engine</strong></td>
+                    <td>WebSocket Broadcaster</td>
+                    <td>Internal</td>
+                    <td>Real-time event emission</td>
+                </tr>
+                <tr>
+                    <td><strong>Indicator Calculator</strong></td>
+                    <td>Trading Engine</td>
+                    <td>Internal (Python)</td>
+                    <td>Indicator computation</td>
+                </tr>
+                <tr>
+                    <td><strong>Risk Manager</strong></td>
+                    <td>Trading Engine</td>
+                    <td>Internal (Python)</td>
+                    <td>Risk validation</td>
+                </tr>
+                <tr>
+                    <td><strong>Signal Generator</strong></td>
+                    <td>Trading Engine</td>
+                    <td>Internal (Python)</td>
+                    <td>Signal generation</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <h2>11. Key Data Flows</h2>
+    <div class="diagram-container">
+        <h3>Bot Creation Flow</h3>
+        <code>User → Frontend Form → POST /api/bots → FastAPI → PostgreSQL → Response → Frontend → Success</code>
+        
+        <h3>Trading Flow</h3>
+        <code>Alpaca WebSocket → Trading Engine → Calculate Indicators → Generate Signal → 
+        Risk Check → Execute Order → Alpaca REST → Log to DB → Broadcast WebSocket → 
+        Frontend Update</code>
+        
+        <h3>Dashboard Update Flow</h3>
+        <code>User Opens Dashboard → Frontend → GET /api/summary → FastAPI → PostgreSQL → 
+        Response → Frontend Display<br/>
+        +<br/>
+        WebSocket Connection → Real-time Events → Frontend Auto-Update</code>
+        
+        <h3>Position Monitoring Flow</h3>
+        <code>Trading Engine → Position Opened → Log to DB → Broadcast WebSocket → 
+        Frontend Positions Page → Real-time Price Updates → Calculate Unrealized P&L → 
+        Display in UI</code>
+    </div>
+
+    <div style="margin-top: 40px; padding: 20px; background: #e8e8e8; border-radius: 8px;">
+        <h3>📝 Notes</h3>
+        <ul>
+            <li>All WebSocket connections use <strong>socket.io</strong> protocol</li>
+            <li>Database operations use <strong>SQLAlchemy ORM</strong> with connection pooling</li>
+            <li>Redis is <strong>optional</strong> but recommended for production</li>
+            <li>All external API calls to Alpaca use <strong>HTTPS</strong></li>
+            <li>Frontend uses <strong>TanStack Query</strong> for automatic caching and refetching</li>
+            <li>Trading Engine runs <strong>asynchronously</strong> and can handle multiple bots concurrently</li>
+        </ul>
+    </div>
+
+    <div style="margin-top: 20px; padding: 15px; background: #d4edda; border-left: 4px solid #28a745; border-radius: 4px;">
+        <strong>✅ Success!</strong> All diagrams should be visible above. If any diagram doesn't render, 
+        check your internet connection (diagrams load from CDN) or try refreshing the page.
+    </div>
+</body>
+</html>
