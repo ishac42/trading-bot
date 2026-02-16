@@ -4,9 +4,12 @@ import { ThemeProvider as MuiThemeProvider } from '@mui/material/styles'
 import CssBaseline from '@mui/material/CssBaseline'
 import { queryClient } from '@/utils/queryClient'
 import { ThemeProvider, useThemeContext } from '@/contexts/ThemeContext'
+import ErrorBoundary from '@/components/ErrorBoundary'
 import Layout from '@/components/layout/Layout'
 import Dashboard from '@/pages/Dashboard'
 import Bots from '@/pages/Bots'
+import CreateBot from '@/pages/CreateBot'
+import EditBot from '@/pages/EditBot'
 import Positions from '@/pages/Positions'
 import Trades from '@/pages/Trades'
 import Analytics from '@/pages/Analytics'
@@ -23,6 +26,8 @@ function AppContent() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/bots" element={<Bots />} />
+            <Route path="/bots/create" element={<CreateBot />} />
+            <Route path="/bots/:botId/edit" element={<EditBot />} />
             <Route path="/positions" element={<Positions />} />
             <Route path="/trades" element={<Trades />} />
             <Route path="/analytics" element={<Analytics />} />
@@ -36,11 +41,13 @@ function AppContent() {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <AppContent />
-      </ThemeProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <AppContent />
+        </ThemeProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   )
 }
 

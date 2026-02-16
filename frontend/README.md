@@ -84,6 +84,22 @@ npm run format:check
 npm run type-check
 ```
 
+### Testing
+
+```bash
+# Run tests in watch mode
+npm test
+
+# Run tests with UI
+npm run test:ui
+
+# Run tests once
+npm run test:run
+
+# Run tests with coverage
+npm run test:coverage
+```
+
 ## Environment Variables
 
 Create a `.env` file in the root directory:
@@ -114,8 +130,8 @@ import { useWebSocket } from '@/hooks/useWebSocket'
 
 ## Development Workflow
 
-1. **Sprint 0** (Current): Foundation & Setup ✅
-2. **Sprint 1**: Design System & Common Components
+1. **Sprint 0**: Foundation & Setup ✅
+2. **Sprint 1**: Design System & Common Components ✅
 3. **Sprint 2**: Dashboard Screen
 4. **Sprint 3**: Bots Management Pages
 5. **Sprint 4**: Positions Page
@@ -154,6 +170,34 @@ useEffect(() => {
   return unsubscribe
 }, [subscribe])
 ```
+
+## Common Components
+
+The application includes a set of reusable common components. See [components/common/README.md](./src/components/common/README.md) for detailed documentation.
+
+**Quick Example:**
+```typescript
+import { StatusBadge, PnLDisplay, Card, Button } from '@/components/common'
+
+<Card title="Bot Status">
+  <StatusBadge status="running" />
+  <PnLDisplay amount={1234.56} percentage={2.5} />
+  <Button variant="primary">Save</Button>
+</Card>
+```
+
+Available components:
+- **StatusBadge** - Status indicators with color coding
+- **PnLDisplay** - Profit & Loss display with formatting
+- **Card** - Reusable card container
+- **Button** - Enhanced button with variants
+- **Input** - Form input with validation
+- **Select** - Dropdown select component
+- **Modal** - Dialog/modal component
+- **LoadingSpinner** - Loading indicators
+- **EmptyState** - Empty state messages
+- **MarketStatusIndicator** - Market status display
+- **ConnectionStatusIndicator** - WebSocket connection status
 
 ## Contributing
 

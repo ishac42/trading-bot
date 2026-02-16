@@ -1,0 +1,300 @@
+/**
+ * Mock data for Dashboard development
+ * 
+ * This mock data simulates what the backend API would return.
+ * Replace with real API calls once the backend is ready.
+ */
+
+import type { Bot, Trade, Position, SummaryStats } from '@/types'
+
+export const mockBots: Bot[] = [
+  {
+    id: 'bot-1',
+    name: 'Momentum Bot #1',
+    status: 'running',
+    capital: 10000,
+    trading_frequency: 60,
+    indicators: {
+      RSI: { period: 14, oversold: 30, overbought: 70 },
+      MACD: { fast: 12, slow: 26, signal: 9 },
+    },
+    risk_management: {
+      stop_loss: 2.0,
+      take_profit: 5.0,
+      max_position_size: 10,
+      max_daily_loss: 10,
+      max_concurrent_positions: 3,
+    },
+    symbols: ['AAPL', 'MSFT', 'GOOGL'],
+    start_hour: 9,
+    start_minute: 30,
+    end_hour: 12,
+    end_minute: 0,
+    created_at: '2026-02-10T08:00:00Z',
+    updated_at: '2026-02-15T10:00:00Z',
+    last_run_at: '2026-02-15T10:23:00Z',
+    is_active: true,
+    error_count: 0,
+  },
+  {
+    id: 'bot-2',
+    name: 'Trend Bot #2',
+    status: 'paused',
+    capital: 5000,
+    trading_frequency: 120,
+    indicators: {
+      SMA: { period: 50 },
+      EMA: { period: 20 },
+    },
+    risk_management: {
+      stop_loss: 2.0,
+      take_profit: 5.0,
+      max_position_size: 10,
+      max_daily_loss: 10,
+      max_concurrent_positions: 2,
+    },
+    symbols: ['TSLA', 'NVDA'],
+    start_hour: 9,
+    start_minute: 30,
+    end_hour: 12,
+    end_minute: 0,
+    created_at: '2026-02-11T08:00:00Z',
+    updated_at: '2026-02-15T09:55:00Z',
+    last_run_at: '2026-02-15T09:55:00Z',
+    is_active: true,
+    error_count: 0,
+  },
+  {
+    id: 'bot-3',
+    name: 'Scalper Bot #3',
+    status: 'stopped',
+    capital: 15000,
+    trading_frequency: 30,
+    indicators: {
+      'Bollinger Bands': { period: 20, stdDev: 2 },
+      Stochastic: { kPeriod: 14, dPeriod: 3 },
+    },
+    risk_management: {
+      stop_loss: 1.0,
+      take_profit: 2.0,
+      max_position_size: 5,
+      max_daily_loss: 5,
+      max_concurrent_positions: 5,
+    },
+    symbols: ['SPY', 'QQQ'],
+    start_hour: 9,
+    start_minute: 30,
+    end_hour: 11,
+    end_minute: 0,
+    created_at: '2026-02-08T08:00:00Z',
+    updated_at: '2026-02-14T11:45:00Z',
+    last_run_at: '2026-02-14T11:45:00Z',
+    is_active: false,
+    error_count: 0,
+  },
+  {
+    id: 'bot-4',
+    name: 'Mean Reversion Bot',
+    status: 'running',
+    capital: 25000,
+    trading_frequency: 45,
+    indicators: {
+      'Bollinger Bands': { period: 20, stdDev: 2 },
+      RSI: { period: 14, oversold: 25, overbought: 75 },
+    },
+    risk_management: {
+      stop_loss: 1.5,
+      take_profit: 3.0,
+      max_position_size: 8,
+      max_daily_loss: 6,
+      max_concurrent_positions: 4,
+    },
+    symbols: ['AMZN', 'NFLX', 'META'],
+    start_hour: 10,
+    start_minute: 0,
+    end_hour: 15,
+    end_minute: 30,
+    created_at: '2026-02-12T08:00:00Z',
+    updated_at: '2026-02-15T14:00:00Z',
+    last_run_at: '2026-02-15T14:00:00Z',
+    is_active: true,
+    error_count: 0,
+  },
+  {
+    id: 'bot-5',
+    name: 'Overnight Gap Bot',
+    status: 'stopped',
+    capital: 8000,
+    trading_frequency: 300,
+    indicators: {
+      SMA: { period: 200 },
+      EMA: { period: 50 },
+    },
+    risk_management: {
+      stop_loss: 3.0,
+      take_profit: 8.0,
+      max_position_size: 15,
+      max_daily_loss: 8,
+      max_concurrent_positions: 2,
+    },
+    symbols: ['JPM', 'BAC', 'GS'],
+    start_hour: 9,
+    start_minute: 30,
+    end_hour: 10,
+    end_minute: 0,
+    created_at: '2026-02-05T08:00:00Z',
+    updated_at: '2026-02-13T10:00:00Z',
+    last_run_at: '2026-02-13T10:00:00Z',
+    is_active: false,
+    error_count: 2,
+  },
+]
+
+export const mockTrades: Trade[] = [
+  // ---- Feb 15 (today) ----
+  { id: 'trade-1', bot_id: 'bot-1', symbol: 'AAPL', type: 'buy', quantity: 10, price: 150.23, timestamp: '2026-02-15T10:23:00Z', status: 'filled', profit_loss: undefined, commission: 1.0 },
+  { id: 'trade-2', bot_id: 'bot-1', symbol: 'MSFT', type: 'sell', quantity: 5, price: 380.45, timestamp: '2026-02-15T10:15:00Z', status: 'filled', profit_loss: 45.67, commission: 1.0 },
+  { id: 'trade-3', bot_id: 'bot-1', symbol: 'GOOGL', type: 'buy', quantity: 3, price: 142.12, timestamp: '2026-02-15T10:08:00Z', status: 'filled', profit_loss: undefined, commission: 1.0 },
+  { id: 'trade-4', bot_id: 'bot-2', symbol: 'TSLA', type: 'sell', quantity: 2, price: 245.78, timestamp: '2026-02-15T09:55:00Z', status: 'filled', profit_loss: 12.34, commission: 1.0 },
+  { id: 'trade-5', bot_id: 'bot-2', symbol: 'NVDA', type: 'buy', quantity: 1, price: 485.12, timestamp: '2026-02-15T09:45:00Z', status: 'filled', profit_loss: undefined, commission: 1.0 },
+  { id: 'trade-40', bot_id: 'bot-4', symbol: 'AMZN', type: 'buy', quantity: 4, price: 178.90, timestamp: '2026-02-15T10:30:00Z', status: 'filled', profit_loss: undefined, commission: 1.0 },
+  { id: 'trade-41', bot_id: 'bot-4', symbol: 'NFLX', type: 'sell', quantity: 2, price: 620.15, timestamp: '2026-02-15T11:05:00Z', status: 'filled', profit_loss: 88.30, commission: 1.5 },
+  { id: 'trade-42', bot_id: 'bot-1', symbol: 'AAPL', type: 'sell', quantity: 5, price: 151.80, timestamp: '2026-02-15T11:30:00Z', status: 'filled', profit_loss: 7.85, commission: 1.0 },
+
+  // ---- Feb 14 ----
+  { id: 'trade-6', bot_id: 'bot-3', symbol: 'SPY', type: 'sell', quantity: 20, price: 450.23, timestamp: '2026-02-14T11:30:00Z', status: 'filled', profit_loss: 234.56, commission: 1.0 },
+  { id: 'trade-7', bot_id: 'bot-1', symbol: 'AAPL', type: 'sell', quantity: 5, price: 152.45, timestamp: '2026-02-14T15:30:00Z', status: 'filled', profit_loss: 11.10, commission: 1.0 },
+  { id: 'trade-8', bot_id: 'bot-2', symbol: 'TSLA', type: 'buy', quantity: 3, price: 242.50, timestamp: '2026-02-14T10:15:00Z', status: 'filled', profit_loss: undefined, commission: 1.0 },
+  { id: 'trade-9', bot_id: 'bot-1', symbol: 'MSFT', type: 'buy', quantity: 8, price: 376.20, timestamp: '2026-02-14T09:45:00Z', status: 'filled', profit_loss: undefined, commission: 1.0 },
+  { id: 'trade-10', bot_id: 'bot-4', symbol: 'META', type: 'buy', quantity: 3, price: 492.30, timestamp: '2026-02-14T10:00:00Z', status: 'filled', profit_loss: undefined, commission: 1.5 },
+  { id: 'trade-11', bot_id: 'bot-4', symbol: 'AMZN', type: 'sell', quantity: 6, price: 180.45, timestamp: '2026-02-14T14:20:00Z', status: 'filled', profit_loss: 62.70, commission: 1.5 },
+  { id: 'trade-12', bot_id: 'bot-3', symbol: 'QQQ', type: 'buy', quantity: 15, price: 385.60, timestamp: '2026-02-14T09:35:00Z', status: 'filled', profit_loss: undefined, commission: 1.0 },
+
+  // ---- Feb 13 ----
+  { id: 'trade-13', bot_id: 'bot-1', symbol: 'GOOGL', type: 'sell', quantity: 4, price: 143.80, timestamp: '2026-02-13T11:00:00Z', status: 'filled', profit_loss: -8.40, commission: 1.0 },
+  { id: 'trade-14', bot_id: 'bot-2', symbol: 'NVDA', type: 'sell', quantity: 2, price: 490.25, timestamp: '2026-02-13T10:45:00Z', status: 'filled', profit_loss: 10.26, commission: 1.0 },
+  { id: 'trade-15', bot_id: 'bot-1', symbol: 'AAPL', type: 'buy', quantity: 12, price: 148.90, timestamp: '2026-02-13T09:40:00Z', status: 'filled', profit_loss: undefined, commission: 1.0 },
+  { id: 'trade-16', bot_id: 'bot-3', symbol: 'SPY', type: 'buy', quantity: 25, price: 448.10, timestamp: '2026-02-13T09:32:00Z', status: 'filled', profit_loss: undefined, commission: 1.0 },
+  { id: 'trade-17', bot_id: 'bot-4', symbol: 'NFLX', type: 'buy', quantity: 2, price: 610.00, timestamp: '2026-02-13T10:15:00Z', status: 'filled', profit_loss: undefined, commission: 1.5 },
+  { id: 'trade-18', bot_id: 'bot-2', symbol: 'TSLA', type: 'sell', quantity: 4, price: 248.90, timestamp: '2026-02-13T14:00:00Z', status: 'filled', profit_loss: 25.60, commission: 1.0 },
+
+  // ---- Feb 12 ----
+  { id: 'trade-19', bot_id: 'bot-1', symbol: 'MSFT', type: 'sell', quantity: 6, price: 378.90, timestamp: '2026-02-12T11:30:00Z', status: 'filled', profit_loss: -12.60, commission: 1.0 },
+  { id: 'trade-20', bot_id: 'bot-2', symbol: 'NVDA', type: 'buy', quantity: 2, price: 482.50, timestamp: '2026-02-12T09:50:00Z', status: 'filled', profit_loss: undefined, commission: 1.0 },
+  { id: 'trade-21', bot_id: 'bot-1', symbol: 'AAPL', type: 'sell', quantity: 8, price: 149.60, timestamp: '2026-02-12T14:15:00Z', status: 'filled', profit_loss: 5.60, commission: 1.0 },
+  { id: 'trade-22', bot_id: 'bot-3', symbol: 'QQQ', type: 'sell', quantity: 10, price: 388.20, timestamp: '2026-02-12T10:45:00Z', status: 'filled', profit_loss: 26.00, commission: 1.0 },
+  { id: 'trade-23', bot_id: 'bot-4', symbol: 'META', type: 'sell', quantity: 2, price: 498.10, timestamp: '2026-02-12T15:00:00Z', status: 'filled', profit_loss: 11.60, commission: 1.5 },
+
+  // ---- Feb 11 ----
+  { id: 'trade-24', bot_id: 'bot-1', symbol: 'GOOGL', type: 'buy', quantity: 5, price: 140.20, timestamp: '2026-02-11T09:35:00Z', status: 'filled', profit_loss: undefined, commission: 1.0 },
+  { id: 'trade-25', bot_id: 'bot-2', symbol: 'TSLA', type: 'buy', quantity: 4, price: 240.00, timestamp: '2026-02-11T10:00:00Z', status: 'filled', profit_loss: undefined, commission: 1.0 },
+  { id: 'trade-26', bot_id: 'bot-1', symbol: 'MSFT', type: 'buy', quantity: 6, price: 375.00, timestamp: '2026-02-11T10:20:00Z', status: 'filled', profit_loss: undefined, commission: 1.0 },
+  { id: 'trade-27', bot_id: 'bot-3', symbol: 'SPY', type: 'sell', quantity: 18, price: 447.50, timestamp: '2026-02-11T11:45:00Z', status: 'filled', profit_loss: -36.00, commission: 1.0 },
+  { id: 'trade-28', bot_id: 'bot-4', symbol: 'AMZN', type: 'buy', quantity: 6, price: 175.30, timestamp: '2026-02-11T09:45:00Z', status: 'filled', profit_loss: undefined, commission: 1.5 },
+
+  // ---- Feb 10 ----
+  { id: 'trade-29', bot_id: 'bot-1', symbol: 'AAPL', type: 'buy', quantity: 8, price: 147.50, timestamp: '2026-02-10T09:35:00Z', status: 'filled', profit_loss: undefined, commission: 1.0 },
+  { id: 'trade-30', bot_id: 'bot-2', symbol: 'NVDA', type: 'sell', quantity: 1, price: 478.90, timestamp: '2026-02-10T11:00:00Z', status: 'filled', profit_loss: -6.22, commission: 1.0 },
+  { id: 'trade-31', bot_id: 'bot-3', symbol: 'QQQ', type: 'buy', quantity: 10, price: 382.40, timestamp: '2026-02-10T09:40:00Z', status: 'filled', profit_loss: undefined, commission: 1.0 },
+  { id: 'trade-32', bot_id: 'bot-1', symbol: 'GOOGL', type: 'sell', quantity: 3, price: 141.50, timestamp: '2026-02-10T14:30:00Z', status: 'filled', profit_loss: 3.90, commission: 1.0 },
+  { id: 'trade-33', bot_id: 'bot-4', symbol: 'NFLX', type: 'sell', quantity: 1, price: 605.00, timestamp: '2026-02-10T15:15:00Z', status: 'filled', profit_loss: -15.00, commission: 1.5 },
+
+  // ---- Feb 9 ----
+  { id: 'trade-34', bot_id: 'bot-1', symbol: 'MSFT', type: 'sell', quantity: 4, price: 374.00, timestamp: '2026-02-09T10:30:00Z', status: 'filled', profit_loss: -8.00, commission: 1.0 },
+  { id: 'trade-35', bot_id: 'bot-2', symbol: 'TSLA', type: 'sell', quantity: 3, price: 244.20, timestamp: '2026-02-09T11:15:00Z', status: 'filled', profit_loss: 12.60, commission: 1.0 },
+  { id: 'trade-36', bot_id: 'bot-3', symbol: 'SPY', type: 'buy', quantity: 18, price: 449.50, timestamp: '2026-02-09T09:35:00Z', status: 'filled', profit_loss: undefined, commission: 1.0 },
+
+  // ---- Feb 8 ----
+  { id: 'trade-37', bot_id: 'bot-1', symbol: 'AAPL', type: 'sell', quantity: 10, price: 148.00, timestamp: '2026-02-08T14:00:00Z', status: 'filled', profit_loss: 5.00, commission: 1.0 },
+  { id: 'trade-38', bot_id: 'bot-2', symbol: 'NVDA', type: 'buy', quantity: 1, price: 480.00, timestamp: '2026-02-08T09:50:00Z', status: 'filled', profit_loss: undefined, commission: 1.0 },
+  { id: 'trade-39', bot_id: 'bot-4', symbol: 'META', type: 'buy', quantity: 2, price: 488.50, timestamp: '2026-02-08T10:30:00Z', status: 'filled', profit_loss: undefined, commission: 1.5 },
+]
+
+export const mockPositions: Position[] = [
+  {
+    id: 'pos-1',
+    bot_id: 'bot-1',
+    symbol: 'AAPL',
+    quantity: 10,
+    entry_price: 150.23,
+    current_price: 151.45,
+    stop_loss_price: 147.23,
+    take_profit_price: 157.74,
+    unrealized_pnl: 12.20,
+    realized_pnl: 0,
+    opened_at: '2026-02-15T10:23:00Z',
+    is_open: true,
+  },
+  {
+    id: 'pos-2',
+    bot_id: 'bot-1',
+    symbol: 'MSFT',
+    quantity: 5,
+    entry_price: 380.45,
+    current_price: 382.12,
+    stop_loss_price: 372.84,
+    take_profit_price: 399.47,
+    unrealized_pnl: 8.35,
+    realized_pnl: 0,
+    opened_at: '2026-02-15T09:45:00Z',
+    is_open: true,
+  },
+  {
+    id: 'pos-3',
+    bot_id: 'bot-1',
+    symbol: 'GOOGL',
+    quantity: 3,
+    entry_price: 142.12,
+    current_price: 140.89,
+    stop_loss_price: 139.28,
+    take_profit_price: 149.23,
+    unrealized_pnl: -3.69,
+    realized_pnl: 0,
+    opened_at: '2026-02-15T10:08:00Z',
+    is_open: true,
+  },
+  {
+    id: 'pos-4',
+    bot_id: 'bot-2',
+    symbol: 'TSLA',
+    quantity: 2,
+    entry_price: 245.78,
+    current_price: 248.23,
+    stop_loss_price: 240.86,
+    take_profit_price: 258.07,
+    unrealized_pnl: 4.90,
+    realized_pnl: 0,
+    opened_at: '2026-02-15T09:35:00Z',
+    is_open: true,
+  },
+  {
+    id: 'pos-5',
+    bot_id: 'bot-2',
+    symbol: 'NVDA',
+    quantity: 1,
+    entry_price: 485.12,
+    current_price: 483.45,
+    stop_loss_price: 475.42,
+    take_profit_price: 509.38,
+    unrealized_pnl: -1.67,
+    realized_pnl: 0,
+    opened_at: '2026-02-15T09:45:00Z',
+    is_open: true,
+  },
+]
+
+export const mockSummaryStats: SummaryStats = {
+  total_pnl: 1234.56,
+  pnl_percentage: 2.5,
+  active_bots: 3,
+  open_positions: 5,
+  positions_value: 12345.67,
+}
+
+/**
+ * Helper to get bot name by ID
+ */
+export function getBotName(botId: string): string {
+  const bot = mockBots.find((b) => b.id === botId)
+  return bot?.name || 'Unknown Bot'
+}
