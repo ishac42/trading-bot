@@ -1,5 +1,7 @@
 # Trading Bot System Architecture - Visual Diagrams
 
+> **📌 Maintenance Note**: This document must stay synchronized with `ARCHITECTURE.md` and `ARCHITECTURE_DIAGRAMS.html`. See `ARCHITECTURE_MAINTENANCE.md` for sync guidelines.
+
 This document provides visual representations of how all system components relate to each other according to the architecture design.
 
 ---

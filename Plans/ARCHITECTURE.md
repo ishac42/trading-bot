@@ -1,5 +1,7 @@
 # Auto Trading Bot - Architecture & Technology Stack
 
+> **📌 Maintenance Note**: This document must stay synchronized with `ARCHITECTURE_DIAGRAMS.html` and `SYSTEM_ARCHITECTURE_DIAGRAMS.md`. See `ARCHITECTURE_MAINTENANCE.md` for sync guidelines.
+
 ## Overview
 A multi-bot stock trading system that uses technical indicators to execute trades during the first few hours of market open. Each bot can be independently configured with different indicators, trading frequency, capital allocation, and risk management parameters.
 
