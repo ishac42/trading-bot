@@ -169,7 +169,7 @@ export const useAllFilteredTrades = (filters: TradeFilters) => {
         page: 1,
         pageSize: 99999,
       })
-      return response.data
+      return response.data.trades
     },
     staleTime: 1000 * 30,
     enabled: false, // Only fetch on demand

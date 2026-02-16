@@ -24,8 +24,12 @@ export const useRecentTrades = (limit: number = 10) => {
           )
           .slice(0, limit)
       }
-      const response = await api.getTrades({ limit, sort: '-timestamp' })
-      return response.data
+      const response = await api.getTrades({
+        pageSize: limit,
+        sortField: 'timestamp',
+        sortDirection: 'desc',
+      })
+      return response.data.trades
     },
     staleTime: 1000 * 15, // 15 seconds for trade data
   })
