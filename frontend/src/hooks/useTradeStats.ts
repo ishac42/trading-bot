@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import type { Trade, TradeFilters, TradeStats } from '@/types'
 import { mockTrades, getBotName } from '@/mocks/dashboardData'
 
-const USE_MOCK = true
+const USE_MOCK = false // Backend is available
 
 /**
  * Compute trade statistics from a set of trades

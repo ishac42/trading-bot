@@ -1,6 +1,6 @@
 import { io, Socket } from 'socket.io-client'
 
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws'
+const WS_URL = import.meta.env.VITE_WS_URL || 'http://localhost:8000'
 
 export type WebSocketEvent =
   | 'trade_executed'
@@ -23,7 +23,8 @@ class WebSocketService {
     }
 
     this.socket = io(WS_URL, {
-      transports: ['websocket'],
+      path: '/ws/',
+      transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionDelay: this.reconnectDelay,
       reconnectionAttempts: this.maxReconnectAttempts,

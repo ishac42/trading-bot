@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     ALPACA_BASE_URL: str = "https://paper-api.alpaca.markets"
 
     # CORS
-    CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+    CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:5175", "http://localhost:3000"]
 
     # WebSocket
     WS_PING_INTERVAL: int = 25

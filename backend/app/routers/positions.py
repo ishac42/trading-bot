@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models import Position, Trade, utcnow, generate_uuid
 from app.schemas import PositionResponseSchema
+from app.websocket_manager import ws_manager
 
 router = APIRouter(prefix="/positions", tags=["positions"])
 
@@ -122,7 +123,22 @@ async def close_position(position_id: str, db: AsyncSession = Depends(get_db)):
     db.add(sell_trade)
     await db.flush()
 
-    # TODO: Phase 8 — emit position_updated WebSocket event
+    # Broadcast position update to all connected WebSocket clients
+    await ws_manager.emit_position_updated(_position_to_response(position))
+
+    # Broadcast the corresponding sell trade event
+    await ws_manager.emit_trade_executed({
+        "id": sell_trade.id,
+        "bot_id": sell_trade.bot_id,
+        "symbol": sell_trade.symbol,
+        "type": sell_trade.type,
+        "quantity": sell_trade.quantity,
+        "price": sell_trade.price,
+        "timestamp": sell_trade.timestamp.isoformat() if sell_trade.timestamp else None,
+        "profit_loss": sell_trade.profit_loss,
+        "status": sell_trade.status,
+    })
+
     # TODO: Phase 9 — execute sell order via Alpaca API
 
     return {"success": True}

@@ -3,7 +3,7 @@ import { api } from '@/services/api'
 import type { Bot, BotFormData } from '@/types'
 import { mockBots } from '@/mocks/dashboardData'
 
-const USE_MOCK = true // Toggle to false when backend is available
+const USE_MOCK = false // Backend is available
 
 /**
  * Hook to fetch all bots

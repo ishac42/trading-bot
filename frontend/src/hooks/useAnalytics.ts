@@ -10,7 +10,7 @@ import type {
 } from '@/types'
 import { mockTrades, mockBots, getBotName } from '@/mocks/dashboardData'
 
-const USE_MOCK = true
+const USE_MOCK = false // Backend is available
 
 /**
  * Compute comprehensive analytics from trades and bots

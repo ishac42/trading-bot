@@ -20,6 +20,7 @@ from app.database import get_db
 from app.models import Bot
 from app.schemas import BotCreateSchema, BotResponseSchema, BotUpdateSchema
 from app.models import utcnow, generate_uuid
+from app.websocket_manager import ws_manager
 
 router = APIRouter(prefix="/bots", tags=["bots"])
 
@@ -143,7 +144,13 @@ async def start_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
     bot.updated_at = utcnow()
     await db.flush()
 
-    # TODO: Phase 8 — emit bot_status_changed WebSocket event
+    # Broadcast status change to all connected WebSocket clients
+    await ws_manager.emit_bot_status_changed({
+        "id": bot.id,
+        "status": bot.status,
+        "is_active": bot.is_active,
+    })
+
     # TODO: Phase 10 — register bot with TradingEngine
 
     return {"success": True}
@@ -161,7 +168,13 @@ async def stop_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
     bot.updated_at = utcnow()
     await db.flush()
 
-    # TODO: Phase 8 — emit bot_status_changed WebSocket event
+    # Broadcast status change to all connected WebSocket clients
+    await ws_manager.emit_bot_status_changed({
+        "id": bot.id,
+        "status": bot.status,
+        "is_active": bot.is_active,
+    })
+
     # TODO: Phase 10 — unregister bot from TradingEngine
 
     return {"success": True}
@@ -178,7 +191,13 @@ async def pause_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
     bot.updated_at = utcnow()
     await db.flush()
 
-    # TODO: Phase 8 — emit bot_status_changed WebSocket event
+    # Broadcast status change to all connected WebSocket clients
+    await ws_manager.emit_bot_status_changed({
+        "id": bot.id,
+        "status": bot.status,
+        "is_active": bot.is_active,
+    })
+
     # TODO: Phase 10 — pause bot in TradingEngine
 
     return {"success": True}
