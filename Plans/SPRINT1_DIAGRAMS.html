@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sprint 1 — Backend Foundation Diagrams</title>
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ 
+            startOnLoad: true,
+            theme: 'default',
+            themeVariables: {
+                primaryColor: '#4a90e2',
+                primaryTextColor: '#fff',
+                primaryBorderColor: '#357abd',
+                lineColor: '#333',
+                secondaryColor: '#f0f0f0',
+                tertiaryColor: '#e8e8e8'
+            }
+        });
+    </script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #4a90e2;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #555;
+            margin-top: 40px;
+            padding: 10px;
+            background-color: #e8e8e8;
+            border-left: 4px solid #4a90e2;
+        }
+        h3 {
+            color: #666;
+            margin-top: 20px;
+        }
+        .diagram-container {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .mermaid {
+            text-align: center;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #4a90e2;
+            color: white;
+        }
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+        code {
+            background-color: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        .note {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .phase-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            color: white;
+            font-size: 0.85em;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+        .phase-1 { background-color: #28a745; }
+        .phase-2 { background-color: #17a2b8; }
+        .phase-3 { background-color: #6f42c1; }
+        .file-tree {
+            font-family: 'Courier New', monospace;
+            background: #1e1e2e;
+            color: #cdd6f4;
+            padding: 20px 25px;
+            border-radius: 8px;
+            line-height: 1.6;
+            font-size: 14px;
+            overflow-x: auto;
+        }
+        .file-tree .folder { color: #89b4fa; font-weight: bold; }
+        .file-tree .file { color: #a6e3a1; }
+        .file-tree .config { color: #fab387; }
+        .file-tree .migration { color: #f9e2af; }
+        .file-tree .comment { color: #6c7086; font-style: italic; }
+    </style>
+</head>
+<body>
+    <h1>🏗️ Sprint 1 — Backend Foundation: Visual Diagrams</h1>
+    
+    <div class="success">
+        <strong>✅ Sprint 1 Complete!</strong> All three phases implemented, tested, and verified.
+        Server running on <code>http://localhost:8000</code> with live-reload. Swagger docs at <code>/docs</code>.
+    </div>
+
+    <div class="note">
+        <strong>📌 Sprint 1 Phases:</strong>
+        <span class="phase-badge phase-1">Phase 1</span> Project Foundation &amp; FastAPI Setup &nbsp;
+        <span class="phase-badge phase-2">Phase 2</span> Database Layer &amp; Alembic Migrations &nbsp;
+        <span class="phase-badge phase-3">Phase 3</span> Pydantic Schemas (Frontend Contract Match)
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>1. Sprint 1 — High-Level Component Overview</h2>
+    <!-- ============================================================ -->
+    <div class="diagram-container">
+        <div class="mermaid">
+graph TB
+    subgraph "Phase 1 — Project Foundation"
+        direction TB
+        Main["main.py<br/>FastAPI App Entry Point"]
+        Config["config.py<br/>pydantic-settings"]
+        CORS["CORS Middleware<br/>localhost:5173, :3000"]
+        Health["/api/health<br/>Health Check"]
+        Env[".env<br/>Environment Variables"]
+    end
+
+    subgraph "Phase 1 — API Routers"
+        direction TB
+        BotRouter["bots.py<br/>8 endpoints"]
+        TradeRouter["trades.py<br/>3 endpoints"]
+        PosRouter["positions.py<br/>3 endpoints"]
+        MarketRouter["market_data.py<br/>3 endpoints"]
+    end
+
+    subgraph "Phase 2 — Database Layer"
+        direction TB
+        DB["database.py<br/>Async Engine + Session"]
+        BotModel["Bot Model<br/>18 columns, 1 index"]
+        TradeModel["Trade Model<br/>13 columns, 4 indexes"]
+        PosModel["Position Model<br/>13 columns, 3 indexes"]
+        Alembic["Alembic<br/>initial_schema migration"]
+    end
+
+    subgraph "Phase 3 — Pydantic Schemas"
+        direction TB
+        BotSchemas["Bot Schemas<br/>Create / Update / Response"]
+        TradeSchemas["Trade Schemas<br/>Response / List / Stats"]
+        PosSchemas["Position Schemas<br/>Response"]
+        DashSchemas["Dashboard Schemas<br/>Summary / Market Status"]
+        AnalSchemas["Analytics Schemas<br/>Overview / Performance"]
+    end
+
+    subgraph "Infrastructure"
+        direction TB
+        PostgreSQL[(PostgreSQL 18<br/>trading_bot DB)]
+        Venv["Python 3.14 venv<br/>20+ packages"]
+    end
+
+    Env --> Config
+    Config --> Main
+    Main --> CORS
+    Main --> Health
+    Main --> BotRouter
+    Main --> TradeRouter
+    Main --> PosRouter
+    Main --> MarketRouter
+
+    BotRouter --> BotSchemas
+    TradeRouter --> TradeSchemas
+    PosRouter --> PosSchemas
+    MarketRouter --> DashSchemas
+
+    BotRouter --> DB
+    TradeRouter --> DB
+    PosRouter --> DB
+    MarketRouter --> DB
+
+    DB --> BotModel
+    DB --> TradeModel
+    DB --> PosModel
+
+    Alembic --> PostgreSQL
+    DB --> PostgreSQL
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>2. Project File Structure</h2>
+    <!-- ============================================================ -->
+    <div class="diagram-container">
+        <div class="file-tree">
+<span class="folder">backend/</span>
+├── <span class="config">alembic.ini</span>              <span class="comment"># Alembic config → async PostgreSQL</span>
+├── <span class="config">requirements.txt</span>         <span class="comment"># 20+ pinned dependencies</span>
+├── <span class="config">.env</span>                     <span class="comment"># DATABASE_URL, ALPACA keys, REDIS_URL</span>
+├── <span class="config">.env.example</span>             <span class="comment"># Template for new developers</span>
+│
+├── <span class="folder">alembic/</span>
+│   ├── <span class="file">env.py</span>               <span class="comment"># Async migration runner</span>
+│   ├── <span class="file">script.py.mako</span>       <span class="comment"># Migration template</span>
+│   └── <span class="folder">versions/</span>
+│       └── <span class="migration">d0f131fcbb06_initial_schema.py</span>  <span class="comment"># Creates bots, trades, positions</span>
+│
+├── <span class="folder">app/</span>
+│   ├── <span class="file">__init__.py</span>
+│   ├── <span class="file">config.py</span>            <span class="comment"># Settings via pydantic-settings (13 vars)</span>
+│   ├── <span class="file">database.py</span>          <span class="comment"># AsyncEngine + async_sessionmaker + get_db</span>
+│   ├── <span class="file">models.py</span>            <span class="comment"># Bot, Trade, Position ORM models</span>
+│   ├── <span class="file">schemas.py</span>           <span class="comment"># 20+ Pydantic schemas (frontend match)</span>
+│   ├── <span class="file">dependencies.py</span>      <span class="comment"># Shared deps placeholder</span>
+│   └── <span class="file">main.py</span>              <span class="comment"># FastAPI app, CORS, router registration</span>
+│   │
+│   └── <span class="folder">routers/</span>
+│       ├── <span class="file">__init__.py</span>
+│       ├── <span class="file">bots.py</span>          <span class="comment"># CRUD + start/stop/pause (8 endpoints)</span>
+│       ├── <span class="file">trades.py</span>        <span class="comment"># List + stats + detail (3 endpoints)</span>
+│       ├── <span class="file">positions.py</span>     <span class="comment"># List + detail + close (3 endpoints)</span>
+│       └── <span class="file">market_data.py</span>   <span class="comment"># Status + data + summary (3 endpoints)</span>
+│
+├── <span class="folder">tests/</span>
+│   └── <span class="file">__init__.py</span>          <span class="comment"># Test package (ready for Sprint 2)</span>
+│
+└── <span class="folder">venv/</span>                    <span class="comment"># Python 3.14 virtual environment</span>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>3. Database Schema — Entity Relationship Diagram</h2>
+    <!-- ============================================================ -->
+    <div class="diagram-container">
+        <div class="mermaid">
+erDiagram
+    BOTS ||--o{ TRADES : "has many"
+    BOTS ||--o{ POSITIONS : "has many"
+
+    BOTS {
+        string id PK "UUID (36 chars)"
+        string name "NOT NULL, VARCHAR(255)"
+        string status "running|paused|stopped|error"
+        float capital "NOT NULL"
+        int trading_frequency "NOT NULL (seconds)"
+        json indicators "NOT NULL, default dict"
+        json risk_management "NOT NULL, default dict"
+        json symbols "NOT NULL, default list"
+        int start_hour "default 9"
+        int start_minute "default 30"
+        int end_hour "default 12"
+        int end_minute "default 0"
+        datetime created_at "TZ-aware, auto"
+        datetime updated_at "TZ-aware, auto + onupdate"
+        datetime last_run_at "nullable"
+        bool is_active "default false"
+        int error_count "default 0"
+    }
+
+    TRADES {
+        string id PK "UUID (36 chars)"
+        string bot_id FK "CASCADE delete"
+        string symbol "NOT NULL, VARCHAR(20)"
+        string type "buy|sell"
+        int quantity "NOT NULL"
+        float price "NOT NULL"
+        datetime timestamp "TZ-aware, auto"
+        json indicators_snapshot "nullable"
+        float profit_loss "nullable"
+        string order_id "nullable, VARCHAR(255)"
+        string status "pending|filled|cancelled|failed"
+        float commission "nullable"
+        float slippage "nullable"
+    }
+
+    POSITIONS {
+        string id PK "UUID (36 chars)"
+        string bot_id FK "CASCADE delete"
+        string symbol "NOT NULL, VARCHAR(20)"
+        int quantity "NOT NULL"
+        float entry_price "NOT NULL"
+        float current_price "NOT NULL"
+        float stop_loss_price "nullable"
+        float take_profit_price "nullable"
+        float unrealized_pnl "default 0.0"
+        float realized_pnl "default 0.0"
+        datetime opened_at "TZ-aware, auto"
+        datetime closed_at "nullable"
+        bool is_open "default true"
+    }
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>4. Database Indexes</h2>
+    <!-- ============================================================ -->
+    <div class="diagram-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Table</th>
+                    <th>Index Name</th>
+                    <th>Column(s)</th>
+                    <th>Purpose</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>bots</strong></td>
+                    <td><code>ix_bots_status</code></td>
+                    <td>status</td>
+                    <td>Filter bots by status (running/stopped/paused/error)</td>
+                </tr>
+                <tr>
+                    <td><strong>trades</strong></td>
+                    <td><code>ix_trades_bot_id</code></td>
+                    <td>bot_id</td>
+                    <td>Join/filter trades per bot</td>
+                </tr>
+                <tr>
+                    <td><strong>trades</strong></td>
+                    <td><code>ix_trades_symbol</code></td>
+                    <td>symbol</td>
+                    <td>Filter trades by ticker symbol</td>
+                </tr>
+                <tr>
+                    <td><strong>trades</strong></td>
+                    <td><code>ix_trades_timestamp</code></td>
+                    <td>timestamp</td>
+                    <td>Date range filtering & sorting</td>
+                </tr>
+                <tr>
+                    <td><strong>trades</strong></td>
+                    <td><code>ix_trades_status</code></td>
+                    <td>status</td>
+                    <td>Filter by fill status</td>
+                </tr>
+                <tr>
+                    <td><strong>positions</strong></td>
+                    <td><code>ix_positions_bot_id</code></td>
+                    <td>bot_id</td>
+                    <td>Join/filter positions per bot</td>
+                </tr>
+                <tr>
+                    <td><strong>positions</strong></td>
+                    <td><code>ix_positions_symbol</code></td>
+                    <td>symbol</td>
+                    <td>Filter positions by ticker</td>
+                </tr>
+                <tr>
+                    <td><strong>positions</strong></td>
+                    <td><code>ix_positions_is_open</code></td>
+                    <td>is_open</td>
+                    <td>Quickly fetch open positions</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>5. API Endpoint Map</h2>
+    <!-- ============================================================ -->
+    <div class="diagram-container">
+        <div class="mermaid">
+graph LR
+    subgraph "FastAPI App — /api prefix"
+        direction TB
+        H["/api/health<br/>GET — Health Check"]
+
+        subgraph "bots.py — /api/bots"
+            B1["GET /bots<br/>List all bots"]
+            B2["POST /bots<br/>Create bot"]
+            B3["GET /bots/:id<br/>Get single bot"]
+            B4["PUT /bots/:id<br/>Update bot"]
+            B5["DELETE /bots/:id<br/>Delete bot"]
+            B6["POST /bots/:id/start<br/>Start bot"]
+            B7["POST /bots/:id/stop<br/>Stop bot"]
+            B8["POST /bots/:id/pause<br/>Pause bot"]
+        end
+
+        subgraph "trades.py — /api/trades"
+            T1["GET /trades<br/>List (paginated + filtered)"]
+            T2["GET /trades/stats<br/>Computed statistics"]
+            T3["GET /trades/:id<br/>Get single trade"]
+        end
+
+        subgraph "positions.py — /api/positions"
+            P1["GET /positions<br/>List open positions"]
+            P2["GET /positions/:id<br/>Get single position"]
+            P3["POST /positions/:id/close<br/>Close position"]
+        end
+
+        subgraph "market_data.py — /api"
+            M1["GET /market-status<br/>Market open/close"]
+            M2["GET /market-data/:symbol<br/>Symbol data"]
+            M3["GET /summary<br/>Dashboard stats"]
+        end
+    end
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>6. API Endpoint Details</h2>
+    <!-- ============================================================ -->
+    <div class="diagram-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Method</th>
+                    <th>Endpoint</th>
+                    <th>Router</th>
+                    <th>Request Body</th>
+                    <th>Response Schema</th>
+                    <th>Features</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td colspan="6" style="background:#e8f4fd;font-weight:bold">Bot Management (8 endpoints)</td></tr>
+                <tr>
+                    <td><code>GET</code></td>
+                    <td><code>/api/bots</code></td>
+                    <td>bots.py</td>
+                    <td>—</td>
+                    <td><code>BotResponseSchema[]</code></td>
+                    <td>Ordered by created_at DESC</td>
+                </tr>
+                <tr>
+                    <td><code>POST</code></td>
+                    <td><code>/api/bots</code></td>
+                    <td>bots.py</td>
+                    <td><code>BotCreateSchema</code></td>
+                    <td><code>BotResponseSchema</code></td>
+                    <td>UUID auto-gen, status=stopped</td>
+                </tr>
+                <tr>
+                    <td><code>GET</code></td>
+                    <td><code>/api/bots/{id}</code></td>
+                    <td>bots.py</td>
+                    <td>—</td>
+                    <td><code>BotResponseSchema</code></td>
+                    <td>404 if not found</td>
+                </tr>
+                <tr>
+                    <td><code>PUT</code></td>
+                    <td><code>/api/bots/{id}</code></td>
+                    <td>bots.py</td>
+                    <td><code>BotUpdateSchema</code></td>
+                    <td><code>BotResponseSchema</code></td>
+                    <td>Full replace, auto updated_at</td>
+                </tr>
+                <tr>
+                    <td><code>DELETE</code></td>
+                    <td><code>/api/bots/{id}</code></td>
+                    <td>bots.py</td>
+                    <td>—</td>
+                    <td><code>{success: true}</code></td>
+                    <td>Blocks if running, cascades</td>
+                </tr>
+                <tr>
+                    <td><code>POST</code></td>
+                    <td><code>/api/bots/{id}/start</code></td>
+                    <td>bots.py</td>
+                    <td>—</td>
+                    <td><code>{success: true}</code></td>
+                    <td>Sets running + is_active=true</td>
+                </tr>
+                <tr>
+                    <td><code>POST</code></td>
+                    <td><code>/api/bots/{id}/stop</code></td>
+                    <td>bots.py</td>
+                    <td>—</td>
+                    <td><code>{success: true}</code></td>
+                    <td>Sets stopped + is_active=false</td>
+                </tr>
+                <tr>
+                    <td><code>POST</code></td>
+                    <td><code>/api/bots/{id}/pause</code></td>
+                    <td>bots.py</td>
+                    <td>—</td>
+                    <td><code>{success: true}</code></td>
+                    <td>Sets paused</td>
+                </tr>
+
+                <tr><td colspan="6" style="background:#e8f4fd;font-weight:bold">Trade Management (3 endpoints)</td></tr>
+                <tr>
+                    <td><code>GET</code></td>
+                    <td><code>/api/trades</code></td>
+                    <td>trades.py</td>
+                    <td>—</td>
+                    <td><code>TradeListResponseSchema</code></td>
+                    <td>Paginated, filtered, sorted</td>
+                </tr>
+                <tr>
+                    <td><code>GET</code></td>
+                    <td><code>/api/trades/stats</code></td>
+                    <td>trades.py</td>
+                    <td>—</td>
+                    <td><code>TradeStatsSchema</code></td>
+                    <td>Win rate, P&L by date/symbol/bot</td>
+                </tr>
+                <tr>
+                    <td><code>GET</code></td>
+                    <td><code>/api/trades/{id}</code></td>
+                    <td>trades.py</td>
+                    <td>—</td>
+                    <td><code>TradeResponseSchema</code></td>
+                    <td>404 if not found</td>
+                </tr>
+
+                <tr><td colspan="6" style="background:#e8f4fd;font-weight:bold">Position Management (3 endpoints)</td></tr>
+                <tr>
+                    <td><code>GET</code></td>
+                    <td><code>/api/positions</code></td>
+                    <td>positions.py</td>
+                    <td>—</td>
+                    <td><code>PositionResponseSchema[]</code></td>
+                    <td>Open only, filtered, sorted</td>
+                </tr>
+                <tr>
+                    <td><code>GET</code></td>
+                    <td><code>/api/positions/{id}</code></td>
+                    <td>positions.py</td>
+                    <td>—</td>
+                    <td><code>PositionResponseSchema</code></td>
+                    <td>404 if not found</td>
+                </tr>
+                <tr>
+                    <td><code>POST</code></td>
+                    <td><code>/api/positions/{id}/close</code></td>
+                    <td>positions.py</td>
+                    <td>—</td>
+                    <td><code>{success: true}</code></td>
+                    <td>Creates sell trade, moves PnL</td>
+                </tr>
+
+                <tr><td colspan="6" style="background:#e8f4fd;font-weight:bold">Market Data &amp; Dashboard (3 endpoints)</td></tr>
+                <tr>
+                    <td><code>GET</code></td>
+                    <td><code>/api/market-status</code></td>
+                    <td>market_data.py</td>
+                    <td>—</td>
+                    <td><code>MarketStatusSchema</code></td>
+                    <td>Placeholder (Alpaca in Sprint 3)</td>
+                </tr>
+                <tr>
+                    <td><code>GET</code></td>
+                    <td><code>/api/market-data/{symbol}</code></td>
+                    <td>market_data.py</td>
+                    <td>—</td>
+                    <td><code>dict</code></td>
+                    <td>Placeholder (Alpaca in Sprint 3)</td>
+                </tr>
+                <tr>
+                    <td><code>GET</code></td>
+                    <td><code>/api/summary</code></td>
+                    <td>market_data.py</td>
+                    <td>—</td>
+                    <td><code>SummaryStatsSchema</code></td>
+                    <td>Live DB aggregation</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>7. Request Flow — Bot CRUD Lifecycle</h2>
+    <!-- ============================================================ -->
+    <div class="diagram-container">
+        <div class="mermaid">
+sequenceDiagram
+    participant Client as Frontend / Client
+    participant FastAPI as FastAPI App
+    participant Router as bots.py Router
+    participant Schema as Pydantic Schemas
+    participant DB as database.py
+    participant PG as PostgreSQL
+
+    Note over Client,PG: CREATE BOT
+    Client->>FastAPI: POST /api/bots (JSON body)
+    FastAPI->>Schema: Validate → BotCreateSchema
+    Schema-->>Router: Validated data
+    Router->>Router: generate_uuid()
+    Router->>DB: db.add(Bot), db.flush()
+    DB->>PG: INSERT INTO bots
+    PG-->>DB: Row inserted
+    DB-->>Router: Bot ORM object
+    Router->>Router: _bot_to_response() → ISO timestamps
+    Router-->>Client: 201 BotResponseSchema
+
+    Note over Client,PG: GET ALL BOTS
+    Client->>FastAPI: GET /api/bots
+    FastAPI->>Router: get_bots()
+    Router->>DB: select(Bot).order_by(desc)
+    DB->>PG: SELECT * FROM bots ORDER BY created_at DESC
+    PG-->>DB: Rows
+    DB-->>Router: List of Bot objects
+    Router-->>Client: 200 BotResponseSchema[]
+
+    Note over Client,PG: START → PAUSE → STOP → DELETE
+    Client->>FastAPI: POST /api/bots/{id}/start
+    Router->>PG: UPDATE status='running', is_active=true
+    PG-->>Client: {success: true}
+
+    Client->>FastAPI: POST /api/bots/{id}/pause
+    Router->>PG: UPDATE status='paused'
+    PG-->>Client: {success: true}
+
+    Client->>FastAPI: POST /api/bots/{id}/stop
+    Router->>PG: UPDATE status='stopped', is_active=false
+    PG-->>Client: {success: true}
+
+    Client->>FastAPI: DELETE /api/bots/{id}
+    Router->>Router: Check status != running
+    Router->>PG: DELETE FROM bots (CASCADE)
+    PG-->>Client: {success: true}
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>8. Request Flow — Trades (Paginated + Stats)</h2>
+    <!-- ============================================================ -->
+    <div class="diagram-container">
+        <div class="mermaid">
+sequenceDiagram
+    participant Client as Frontend
+    participant Router as trades.py
+    participant DB as AsyncSession
+    participant PG as PostgreSQL
+
+    Note over Client,PG: GET TRADES (paginated, filtered)
+    Client->>Router: GET /api/trades?page=1&pageSize=20&dateRange=week&botId=...
+    Router->>Router: _apply_date_filter(query, "week")
+    Router->>Router: _apply_common_filters(query, botId, symbol, type)
+    Router->>DB: SELECT count(*) — total items
+    DB->>PG: COUNT query
+    PG-->>Router: totalItems
+
+    Router->>DB: SELECT * ... ORDER BY timestamp DESC LIMIT 20 OFFSET 0
+    DB->>PG: Paginated query
+    PG-->>Router: Trade rows
+
+    Router->>Router: Build PaginationSchema (page, pageSize, totalItems, totalPages)
+    Router-->>Client: TradeListResponseSchema { trades[], pagination }
+
+    Note over Client,PG: GET TRADE STATS
+    Client->>Router: GET /api/trades/stats?dateRange=month
+    Router->>DB: SELECT all matching trades
+    DB->>PG: Filtered query
+    PG-->>Router: All trade rows
+
+    Router->>Router: Compute: winRate, totalPnL, avgPnL
+    Router->>Router: Compute: bestTrade, worstTrade, profitFactor
+    Router->>Router: Build: pnlByDate (cumulative)
+    Router->>Router: Build: pnlBySymbol
+    Router->>DB: Fetch bot names for pnlByBot
+    Router->>Router: Build: pnlByBot
+    Router-->>Client: TradeStatsSchema (camelCase)
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>9. Request Flow — Position Close</h2>
+    <!-- ============================================================ -->
+    <div class="diagram-container">
+        <div class="mermaid">
+sequenceDiagram
+    participant Client as Frontend
+    participant Router as positions.py
+    participant DB as AsyncSession
+    participant PG as PostgreSQL
+
+    Client->>Router: POST /api/positions/{id}/close
+    Router->>DB: db.get(Position, id)
+    DB->>PG: SELECT * FROM positions WHERE id = ...
+    PG-->>Router: Position row
+
+    alt Position not found
+        Router-->>Client: 404 Position not found
+    else Position already closed
+        Router-->>Client: 400 Position is already closed
+    else Position is open
+        Router->>Router: position.is_open = False
+        Router->>Router: position.closed_at = utcnow()
+        Router->>Router: position.realized_pnl = unrealized_pnl
+        Router->>Router: position.unrealized_pnl = 0.0
+        Router->>Router: Create sell Trade record
+        Router->>DB: db.add(sell_trade), db.flush()
+        DB->>PG: UPDATE positions + INSERT trades
+        PG-->>Router: Committed
+        Router-->>Client: {success: true}
+    end
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>10. Pydantic Schema → Frontend Type Mapping</h2>
+    <!-- ============================================================ -->
+    <div class="diagram-container">
+        <div class="mermaid">
+graph LR
+    subgraph "Backend — schemas.py"
+        direction TB
+        BCS[BotCreateSchema]
+        BUS[BotUpdateSchema]
+        BRS[BotResponseSchema]
+        TRS[TradeResponseSchema]
+        TLRS[TradeListResponseSchema]
+        PS[PaginationSchema]
+        PRS[PositionResponseSchema]
+        SSS[SummaryStatsSchema]
+        MSS[MarketStatusSchema]
+        TSS[TradeStatsSchema]
+        AOS[AnalyticsOverviewSchema]
+        APDS[AnalyticsPnLDataPointSchema]
+        BPDS[BotPerformanceDataSchema]
+        SPDS[SymbolPerformanceDataSchema]
+        ADS[AnalyticsDataSchema]
+        RMS[RiskManagementSchema]
+    end
+
+    subgraph "Frontend — types/index.ts"
+        direction TB
+        BFD[BotFormData]
+        BFD2[BotFormData]
+        BI[Bot interface]
+        TI[Trade interface]
+        TPI[TradePagination]
+        PI2[Pagination in TradePagination]
+        PI[Position interface]
+        SI[SummaryStats interface]
+        MI[MarketStatus interface]
+        TSI[TradeStats interface]
+        AOI[AnalyticsOverview]
+        APDI[AnalyticsPnLDataPoint]
+        BPDI[BotPerformanceData]
+        SPDI[SymbolPerformanceData]
+        ADI[AnalyticsData]
+        RMI[RiskManagement]
+    end
+
+    BCS -.->|"matches"| BFD
+    BUS -.->|"matches"| BFD2
+    BRS -.->|"matches"| BI
+    TRS -.->|"matches"| TI
+    TLRS -.->|"matches"| TPI
+    PS -.->|"matches"| PI2
+    PRS -.->|"matches"| PI
+    SSS -.->|"matches"| SI
+    MSS -.->|"matches"| MI
+    TSS -.->|"matches"| TSI
+    AOS -.->|"matches"| AOI
+    APDS -.->|"matches"| APDI
+    BPDS -.->|"matches"| BPDI
+    SPDS -.->|"matches"| SPDI
+    ADS -.->|"matches"| ADI
+    RMS -.->|"matches"| RMI
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>11. Naming Convention Strategy</h2>
+    <!-- ============================================================ -->
+    <div class="diagram-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Category</th>
+                    <th>Convention</th>
+                    <th>Example Fields</th>
+                    <th>Reason</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Entity Fields</strong><br/>(Bot, Trade, Position)</td>
+                    <td><code>snake_case</code></td>
+                    <td><code>bot_id</code>, <code>profit_loss</code>, <code>entry_price</code>, <code>is_open</code>, <code>created_at</code></td>
+                    <td>Matches frontend TypeScript interfaces</td>
+                </tr>
+                <tr>
+                    <td><strong>Pagination</strong></td>
+                    <td><code>camelCase</code></td>
+                    <td><code>pageSize</code>, <code>totalItems</code>, <code>totalPages</code></td>
+                    <td>Matches frontend TradePagination type</td>
+                </tr>
+                <tr>
+                    <td><strong>Trade Stats</strong></td>
+                    <td><code>camelCase</code></td>
+                    <td><code>totalTrades</code>, <code>winRate</code>, <code>totalPnL</code>, <code>avgPnL</code>, <code>profitFactor</code></td>
+                    <td>Matches frontend TradeStats type</td>
+                </tr>
+                <tr>
+                    <td><strong>Analytics</strong></td>
+                    <td><code>camelCase</code></td>
+                    <td><code>totalPnL</code>, <code>sharpeRatio</code>, <code>maxDrawdown</code>, <code>botPerformance</code></td>
+                    <td>Matches frontend Analytics* types</td>
+                </tr>
+                <tr>
+                    <td><strong>Timestamps</strong></td>
+                    <td>ISO 8601</td>
+                    <td><code>2026-02-16T04:39:43.356830+00:00</code></td>
+                    <td>Timezone-aware UTC strings</td>
+                </tr>
+                <tr>
+                    <td><strong>IDs</strong></td>
+                    <td>UUID v4</td>
+                    <td><code>32209e6c-0a13-4a6e-8d72-9b72c9c1f4b3</code></td>
+                    <td>Globally unique, 36-char strings</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>12. Infrastructure &amp; Configuration Flow</h2>
+    <!-- ============================================================ -->
+    <div class="diagram-container">
+        <div class="mermaid">
+graph TB
+    subgraph "Environment"
+        EnvFile[".env file<br/>DATABASE_URL, ALPACA keys, REDIS_URL"]
+        SysEnv["System Env Vars<br/>(override .env)"]
+    end
+
+    subgraph "Configuration Layer"
+        Settings["config.py → Settings<br/>pydantic-settings<br/>13 typed variables"]
+    end
+
+    subgraph "Database Layer"
+        Engine["create_async_engine<br/>pool_size=10, max_overflow=20"]
+        Session["async_sessionmaker<br/>expire_on_commit=False"]
+        GetDB["get_db() dependency<br/>auto commit / rollback"]
+    end
+
+    subgraph "ORM Layer"
+        Base["DeclarativeBase"]
+        BotM["Bot model (18 cols)"]
+        TradeM["Trade model (13 cols)"]
+        PosM["Position model (13 cols)"]
+    end
+
+    subgraph "Migration Layer"
+        AlembicINI["alembic.ini<br/>async PostgreSQL URL"]
+        AlembicEnv["alembic/env.py<br/>AsyncEngine runner"]
+        Migration["d0f131fcbb06<br/>initial_schema"]
+    end
+
+    subgraph "PostgreSQL 18"
+        BotsTable[("bots table<br/>+ 1 index")]
+        TradesTable[("trades table<br/>+ 4 indexes")]
+        PosTable[("positions table<br/>+ 3 indexes")]
+        AlembicVer[("alembic_version")]
+    end
+
+    EnvFile --> Settings
+    SysEnv --> Settings
+    Settings --> Engine
+    Engine --> Session
+    Session --> GetDB
+
+    Base --> BotM
+    Base --> TradeM
+    Base --> PosM
+
+    AlembicINI --> AlembicEnv
+    AlembicEnv --> Migration
+    BotM --> Migration
+    TradeM --> Migration
+    PosM --> Migration
+
+    Migration --> BotsTable
+    Migration --> TradesTable
+    Migration --> PosTable
+    Migration --> AlembicVer
+
+    GetDB --> BotsTable
+    GetDB --> TradesTable
+    GetDB --> PosTable
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>13. Dependency Stack</h2>
+    <!-- ============================================================ -->
+    <div class="diagram-container">
+        <div class="mermaid">
+graph TB
+    subgraph "Core Framework"
+        FastAPI["fastapi 0.115.0"]
+        Uvicorn["uvicorn 0.32.0<br/>ASGI Server"]
+        Pydantic["pydantic 2.9.0<br/>Validation"]
+        PydSettings["pydantic-settings 2.6.0<br/>Env Config"]
+    end
+
+    subgraph "Database"
+        SQLAlchemy["sqlalchemy 2.0.35<br/>Async ORM"]
+        AsyncPG["asyncpg 0.30.0<br/>PostgreSQL Driver"]
+        Alembic["alembic 1.14.0<br/>Migrations"]
+    end
+
+    subgraph "Future Integrations (installed)"
+        Redis["redis 5.2.0<br/>Cache/Queue"]
+        SocketIO["python-socketio 5.12.0<br/>WebSocket"]
+        Alpaca["alpaca-py 0.33.0<br/>Trading API"]
+        PandasTA["pandas-ta 0.3.14b<br/>Indicators"]
+        Pandas["pandas 2.2.0"]
+        NumPy["numpy 1.26.0"]
+    end
+
+    subgraph "Utilities"
+        Httpx["httpx 0.28.0<br/>HTTP Client"]
+        DotEnv["python-dotenv 1.0.1"]
+        DateUtil["python-dateutil 2.9.0"]
+        StructLog["structlog 24.4.0<br/>Logging"]
+    end
+
+    subgraph "Testing"
+        Pytest["pytest 8.3.0"]
+        PytestAsync["pytest-asyncio 0.24.0"]
+    end
+
+    FastAPI --> Pydantic
+    FastAPI --> Uvicorn
+    PydSettings --> Pydantic
+    SQLAlchemy --> AsyncPG
+    Alembic --> SQLAlchemy
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>14. Sprint 1 Completion Summary</h2>
+    <!-- ============================================================ -->
+    <div class="diagram-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Phase</th>
+                    <th>Deliverable</th>
+                    <th>Files Created</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><span class="phase-badge phase-1">Phase 1</span></td>
+                    <td>Project structure, venv, requirements, config, main app, CORS, health check, 4 routers (17 endpoints total)</td>
+                    <td><code>requirements.txt</code>, <code>.env</code>, <code>.env.example</code>, <code>config.py</code>, <code>main.py</code>, <code>dependencies.py</code>, <code>bots.py</code>, <code>trades.py</code>, <code>positions.py</code>, <code>market_data.py</code></td>
+                    <td>✅ Complete</td>
+                </tr>
+                <tr>
+                    <td><span class="phase-badge phase-2">Phase 2</span></td>
+                    <td>Async database engine, session factory, 3 ORM models with relationships &amp; indexes, Alembic migration applied</td>
+                    <td><code>database.py</code>, <code>models.py</code>, <code>alembic.ini</code>, <code>alembic/env.py</code>, <code>d0f131fcbb06_initial_schema.py</code></td>
+                    <td>✅ Complete</td>
+                </tr>
+                <tr>
+                    <td><span class="phase-badge phase-3">Phase 3</span></td>
+                    <td>20+ Pydantic schemas matching all frontend TypeScript interfaces with correct naming conventions</td>
+                    <td><code>schemas.py</code></td>
+                    <td>✅ Complete</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>Verified Working</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Test</th>
+                    <th>Result</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td>Server starts on port 8000 with live-reload</td><td>✅</td></tr>
+                <tr><td><code>GET /api/health</code> → <code>{"status": "healthy"}</code></td><td>✅</td></tr>
+                <tr><td><code>POST /api/bots</code> → Creates bot with UUID, persists to PostgreSQL</td><td>✅</td></tr>
+                <tr><td><code>GET /api/bots</code> → Returns persisted bots</td><td>✅</td></tr>
+                <tr><td><code>POST /api/bots/{id}/start</code> → status=running, is_active=true</td><td>✅</td></tr>
+                <tr><td><code>POST /api/bots/{id}/pause</code> → status=paused</td><td>✅</td></tr>
+                <tr><td><code>POST /api/bots/{id}/stop</code> → status=stopped, is_active=false</td><td>✅</td></tr>
+                <tr><td><code>DELETE /api/bots/{id}</code> → Deletes with cascade</td><td>✅</td></tr>
+                <tr><td><code>GET /api/trades</code> → Paginated response shape</td><td>✅</td></tr>
+                <tr><td><code>GET /api/trades/stats</code> → camelCase stats shape</td><td>✅</td></tr>
+                <tr><td><code>GET /api/positions</code> → Correct response shape</td><td>✅</td></tr>
+                <tr><td><code>GET /api/summary</code> → Live DB aggregation</td><td>✅</td></tr>
+                <tr><td><code>GET /api/market-status</code> → Placeholder shape</td><td>✅</td></tr>
+                <tr><td>Swagger docs at <code>/docs</code></td><td>✅</td></tr>
+                <tr><td>Alembic migration applied to PostgreSQL 18</td><td>✅</td></tr>
+                <tr><td>All 3 tables + 8 indexes created</td><td>✅</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div style="margin-top: 40px; padding: 20px; background: #e8e8e8; border-radius: 8px;">
+        <h3>📝 What's Next — Sprint 2</h3>
+        <ul>
+            <li><strong>WebSocket Integration</strong> — Real-time events via socket.io (<code>bot_status_changed</code>, <code>trade_executed</code>, etc.)</li>
+            <li><strong>Alpaca API Integration</strong> — Market data, order execution, position sync</li>
+            <li><strong>Trading Engine Core</strong> — Indicator calculation, signal generation, risk management</li>
+            <li><strong>Frontend → Backend Wire-up</strong> — Flip <code>USE_MOCK = false</code> in frontend hooks</li>
+            <li><strong>Testing</strong> — pytest + pytest-asyncio for all endpoints</li>
+        </ul>
+    </div>
+
+    <div style="margin-top: 20px; padding: 15px; background: #d4edda; border-left: 4px solid #28a745; border-radius: 4px;">
+        <strong>✅ All diagrams rendered!</strong> If any diagram doesn't load, check your internet connection 
+        (Mermaid loads from CDN) or refresh the page.
+    </div>
+</body>
+</html>
