@@ -7,15 +7,19 @@ Endpoints:
   GET /api/summary             → dashboard summary statistics
 """
 
+import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.alpaca_client import alpaca_client
 from app.database import get_db
 from app.models import Bot, Position, Trade
 from app.schemas import MarketStatusSchema, SummaryStatsSchema
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["market-data"])
 
@@ -23,33 +27,92 @@ router = APIRouter(tags=["market-data"])
 @router.get("/market-status", response_model=MarketStatusSchema)
 async def get_market_status():
     """
-    Get current market status.
-    TODO: Phase 9 — integrate with Alpaca clock API.
-    For now returns a placeholder.
+    Get current market status from Alpaca clock API.
+    Falls back to a safe default if the Alpaca client is unavailable.
     """
-    # Placeholder until Alpaca client is integrated
-    return MarketStatusSchema(
-        is_open=False,
-        next_open=None,
-        next_close=None,
-        time_until_close=None,
-    )
+    if alpaca_client is None:
+        logger.warning("Alpaca client not configured — returning placeholder market status")
+        return MarketStatusSchema(
+            is_open=False,
+            next_open=None,
+            next_close=None,
+            time_until_close=None,
+        )
+
+    try:
+        clock = await alpaca_client.get_clock()
+        return MarketStatusSchema(
+            is_open=clock["is_open"],
+            next_open=clock["next_open"],
+            next_close=clock["next_close"],
+            time_until_close=clock["time_until_close"],
+        )
+    except Exception as e:
+        logger.error("Failed to fetch market status from Alpaca: %s", e)
+        # Return a safe fallback rather than raising a 500
+        return MarketStatusSchema(
+            is_open=False,
+            next_open=None,
+            next_close=None,
+            time_until_close=None,
+        )
 
 
 @router.get("/market-data/{symbol}")
 async def get_market_data(symbol: str):
     """
-    Get market data for a specific symbol.
-    TODO: Phase 9 — integrate with Alpaca market data API.
+    Get market data for a specific symbol (latest quote + recent bar).
+    Falls back to zeroes if the Alpaca client is unavailable.
     """
-    # Placeholder
-    return {
-        "symbol": symbol,
-        "price": 0.0,
-        "change": 0.0,
-        "change_percent": 0.0,
-        "volume": 0,
-    }
+    if alpaca_client is None:
+        logger.warning("Alpaca client not configured — returning placeholder market data")
+        return {
+            "symbol": symbol.upper(),
+            "price": 0.0,
+            "bid_price": 0.0,
+            "ask_price": 0.0,
+            "change": 0.0,
+            "change_percent": 0.0,
+            "volume": 0,
+        }
+
+    try:
+        quote = await alpaca_client.get_latest_quote(symbol.upper())
+
+        # Calculate price and mid-price
+        bid = quote["bid_price"]
+        ask = quote["ask_price"]
+        price = round((bid + ask) / 2, 4) if (bid > 0 and ask > 0) else (ask or bid)
+
+        # Try to get previous close for change calculation
+        change = 0.0
+        change_percent = 0.0
+        try:
+            bars = await alpaca_client.get_bars(symbol.upper(), timeframe="1Day", limit=2)
+            if len(bars) >= 2:
+                prev_close = bars[-2]["close"]
+                current_close = bars[-1]["close"]
+                change = round(current_close - prev_close, 2)
+                change_percent = round((change / prev_close) * 100, 2) if prev_close > 0 else 0.0
+        except Exception:
+            # If bar fetch fails, just return 0 change — the quote data is still valid
+            pass
+
+        return {
+            "symbol": symbol.upper(),
+            "price": price,
+            "bid_price": bid,
+            "ask_price": ask,
+            "change": change,
+            "change_percent": change_percent,
+            "volume": 0,  # Volume not available in latest quote; use bars if needed
+        }
+    except Exception as e:
+        logger.error("Failed to fetch market data for %s: %s", symbol, e)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Unable to retrieve market data for {symbol.upper()}",
+        )
 
 
 @router.get("/summary", response_model=SummaryStatsSchema)
