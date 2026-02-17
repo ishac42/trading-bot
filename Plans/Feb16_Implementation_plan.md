@@ -17,9 +17,9 @@
 | Phase 8 | WebSocket Real-time Layer | ✅ Complete |
 | Phase 9 | Alpaca Client Integration | ❌ Not started |
 | Phase 10 | Trading Engine Core | ❌ Not started |
-| Phase 11 | Indicator Calculator | ❌ Not started |
-| Phase 12 | Signal Generator | ❌ Not started |
-| Phase 13 | Risk Manager | ❌ Not started |
+| Phase 11 | Indicator Calculator | ✅ Complete |
+| Phase 12 | Signal Generator | ✅ Complete |
+| Phase 13 | Risk Manager | ✅ Complete |
 | Phase 14 | Docker & Deployment | ❌ Not started |
 | Phase 15 | Testing & Hardening | ❌ Not started |
 

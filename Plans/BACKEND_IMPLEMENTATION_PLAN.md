@@ -1383,6 +1383,39 @@ class SignalGenerator:
 - [ ] Returns `None` when no clear signal (prevents unnecessary trades)
 - [ ] Unit tests for each indicator's signal logic
 
+### Future Upgrade: Option C — Strategy Mode Selector
+
+> **Status**: Planned for a future sprint
+> **Documented in**: `Plans/SIGNAL_STRATEGY_UPGRADE.md`
+
+The initial implementation above uses **majority voting** across all enabled indicators. A near-term upgrade (Option A, documented in `SIGNAL_STRATEGY_UPGRADE.md`) switches to **single-indicator mode**, where each bot has a `primary_indicator` that is the sole driver of BUY/SELL decisions.
+
+**Option C** is a further upgrade that gives users the choice of strategy mode per bot:
+
+```typescript
+// New field on Bot / BotFormData
+strategy_mode: 'single' | 'confluence'
+```
+
+- **`single`** — Only the `primary_indicator` drives entry/exit signals. This is the standard approach for most trading bots: one clear thesis per bot. Want multiple strategies? Run multiple bots.
+
+- **`confluence`** — The current majority-voting approach where all enabled indicators vote and the majority decides. More conservative, may reduce false signals, but can also create contradictions between mean-reversion and trend-following indicators.
+
+**Implementation scope for Option C:**
+
+| File | Change |
+|------|--------|
+| `frontend/src/types/index.ts` | Add `strategy_mode` to `Bot` and `BotFormData` |
+| `frontend/src/components/bots/form/BotForm.tsx` | Add toggle/radio: "Single Indicator" vs "Confluence" |
+| `frontend/src/components/bots/form/IndicatorConfigSection.tsx` | Show primary-indicator selector only when `strategy_mode = 'single'` |
+| `backend/app/models.py` | Add `strategy_mode` column to Bot table |
+| `backend/app/schemas.py` | Add `strategy_mode` to create/update/response schemas |
+| `backend/alembic/versions/` | Migration to add `strategy_mode` column (default: `'single'`) |
+| `backend/app/signal_generator.py` | Already has both `evaluate()` (confluence) and `evaluate_single()` (single) |
+| `backend/app/trading_engine.py` | Read `strategy_mode` from config, route to correct evaluator |
+
+**Estimated effort**: ~0.5 day (most of the logic already exists after Option A)
+
 ---
 
 ## Phase 13: Risk Manager

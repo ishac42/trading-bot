@@ -222,9 +222,20 @@ const PositionRow: React.FC<{
       }}
     >
       <TableCell>
-        <Typography variant="body1" fontWeight={600}>
-          {position.symbol}
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          <Typography variant="body1" fontWeight={600}>
+            {position.symbol}
+          </Typography>
+          {position.entry_indicator && (
+            <Chip
+              label={position.entry_indicator}
+              size="small"
+              color="info"
+              variant="outlined"
+              sx={{ height: 20, fontSize: '0.7rem' }}
+            />
+          )}
+        </Box>
       </TableCell>
       <TableCell>
         <Typography variant="body2" color="text.secondary">
@@ -307,9 +318,20 @@ const PositionCard: React.FC<{
         }}
       >
         <Box>
-          <Typography variant="h3" sx={{ fontWeight: 'bold' }}>
-            {position.symbol}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+            <Typography variant="h3" sx={{ fontWeight: 'bold' }}>
+              {position.symbol}
+            </Typography>
+            {position.entry_indicator && (
+              <Chip
+                label={position.entry_indicator}
+                size="small"
+                color="info"
+                variant="outlined"
+                sx={{ height: 20, fontSize: '0.7rem' }}
+              />
+            )}
+          </Box>
           <Typography variant="body2" color="text.secondary">
             {getBotName(position.bot_id)}
           </Typography>

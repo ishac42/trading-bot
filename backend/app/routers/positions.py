@@ -40,6 +40,7 @@ def _position_to_response(pos: Position) -> dict:
         "opened_at": pos.opened_at.isoformat() if pos.opened_at else None,
         "closed_at": pos.closed_at.isoformat() if pos.closed_at else None,
         "is_open": pos.is_open,
+        "entry_indicator": pos.entry_indicator,
     }
 
 

@@ -224,6 +224,7 @@ export const mockPositions: Position[] = [
     realized_pnl: 0,
     opened_at: '2026-02-15T10:23:00Z',
     is_open: true,
+    entry_indicator: 'RSI',
   },
   {
     id: 'pos-2',
@@ -238,6 +239,7 @@ export const mockPositions: Position[] = [
     realized_pnl: 0,
     opened_at: '2026-02-15T09:45:00Z',
     is_open: true,
+    entry_indicator: 'MACD',
   },
   {
     id: 'pos-3',
@@ -252,6 +254,7 @@ export const mockPositions: Position[] = [
     realized_pnl: 0,
     opened_at: '2026-02-15T10:08:00Z',
     is_open: true,
+    entry_indicator: 'RSI',
   },
   {
     id: 'pos-4',
@@ -266,6 +269,7 @@ export const mockPositions: Position[] = [
     realized_pnl: 0,
     opened_at: '2026-02-15T09:35:00Z',
     is_open: true,
+    entry_indicator: 'SMA',
   },
   {
     id: 'pos-5',
@@ -280,6 +284,7 @@ export const mockPositions: Position[] = [
     realized_pnl: 0,
     opened_at: '2026-02-15T09:45:00Z',
     is_open: true,
+    entry_indicator: 'EMA',
   },
 ]
 

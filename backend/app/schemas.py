@@ -156,6 +156,7 @@ class PositionResponseSchema(BaseModel):
     opened_at: str  # ISO 8601 string
     closed_at: str | None = None
     is_open: bool
+    entry_indicator: str | None = None
 
 
 # =============================================================================

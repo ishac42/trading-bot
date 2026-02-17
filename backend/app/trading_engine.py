@@ -166,12 +166,11 @@ class BotRunner:
 
     async def _process_symbol(self, symbol: str) -> None:
         """
-        Full trading pipeline for a single symbol:
-          1. Fetch recent bars from Alpaca
-          2. Calculate technical indicators
-          3. Generate trading signal (majority vote)
-          4. Validate against risk rules
-          5. Execute trade if signal passes
+        Full trading pipeline for a single symbol (entry-indicator tracking mode):
+          Phase 1 — SELL CHECK: If we have an open position, check only its
+                    entry_indicator for a SELL signal.
+          Phase 2 — BUY CHECK:  If no open position, check all indicators
+                    for a BUY signal. First one wins.
         """
         if not alpaca_client:
             return
@@ -183,80 +182,112 @@ class BotRunner:
                 logger.debug("No bars returned for %s, skipping", symbol)
                 return
 
-            # 2. Calculate indicators
+            # 2. Calculate all indicators
             indicators_config = self.config.get("indicators", {})
             indicators_snapshot = indicator_calculator.calculate(bars, indicators_config)
 
-            # 3. Generate signal via majority voting
-            signal, signal_details = signal_generator.evaluate(
+            # 3. Evaluate each indicator independently
+            per_indicator_signals = signal_generator.evaluate_per_indicator(
                 indicators_snapshot, indicators_config
             )
 
-            # 4. Skip if HOLD
-            if signal == Signal.HOLD:
-                logger.debug("Signal HOLD for %s, no action", symbol)
-                return
-
-            # 5. Get current price
-            current_price = await alpaca_client.get_latest_price(symbol)
-            if current_price <= 0:
-                logger.warning("Invalid price for %s: %.2f, skipping", symbol, current_price)
-                return
-
-            # 6. Validate against risk rules (only blocks BUY; SELL always allowed)
-            today_pnl = await self.engine.get_bot_today_pnl(self.bot_id)
-            open_count = await self._count_open_positions()
-
-            allowed, block_reason = await risk_manager.validate(
-                signal=signal,
-                bot_config=self.config,
-                symbol=symbol,
-                current_price=current_price,
-                today_pnl=today_pnl,
-                open_position_count=open_count,
-            )
-            if not allowed:
-                logger.info(
-                    "Risk manager blocked %s for %s: %s",
-                    signal.value, symbol, block_reason,
-                )
-                return
-
-            # 7. Merge indicator snapshot + signal details for DB storage
-            full_snapshot = {
+            # Build snapshot for DB storage
+            full_snapshot: dict[str, Any] = {
                 "indicators": indicators_snapshot,
-                "signal_details": signal_details,
+                "per_indicator_signals": {k: v.value for k, v in per_indicator_signals.items()},
             }
 
-            # 8. Execute trade
-            await self._execute_trade(symbol, signal, current_price, full_snapshot)
+            # 4. Check for open position on this symbol
+            open_position = await self._get_open_position(symbol)
+
+            if open_position:
+                # ---- SELL PHASE ----
+                entry_ind = open_position.entry_indicator or ""
+
+                if not entry_ind:
+                    # Legacy position (no entry_indicator) — fall back to majority vote
+                    signal, signal_details = signal_generator.evaluate(
+                        indicators_snapshot, indicators_config
+                    )
+                    if signal == Signal.SELL:
+                        current_price = await alpaca_client.get_latest_price(symbol)
+                        if current_price > 0:
+                            full_snapshot["signal_details"] = signal_details
+                            await self._execute_sell(symbol, current_price, full_snapshot)
+                else:
+                    # Check only the entry indicator's signal
+                    entry_signal = per_indicator_signals.get(entry_ind, Signal.HOLD)
+                    if entry_signal == Signal.SELL:
+                        current_price = await alpaca_client.get_latest_price(symbol)
+                        if current_price > 0:
+                            full_snapshot["exit_indicator"] = entry_ind
+                            full_snapshot["exit_signal"] = entry_signal.value
+                            await self._execute_sell(symbol, current_price, full_snapshot)
+                    else:
+                        logger.debug(
+                            "Position open for %s via %s — signal is %s, holding",
+                            symbol, entry_ind, entry_signal.value,
+                        )
+            else:
+                # ---- BUY PHASE ----
+                # Find the first indicator that says BUY
+                buy_indicator: str | None = None
+                for ind_name, ind_signal in per_indicator_signals.items():
+                    if ind_signal == Signal.BUY:
+                        buy_indicator = ind_name
+                        break
+
+                if not buy_indicator:
+                    return  # All indicators say HOLD or SELL — no action
+
+                # Get current price
+                current_price = await alpaca_client.get_latest_price(symbol)
+                if current_price <= 0:
+                    return
+
+                # Risk checks
+                today_pnl = await self.engine.get_bot_today_pnl(self.bot_id)
+                open_count = await self._count_open_positions()
+
+                allowed, block_reason = await risk_manager.validate(
+                    signal=Signal.BUY,
+                    bot_config=self.config,
+                    symbol=symbol,
+                    current_price=current_price,
+                    today_pnl=today_pnl,
+                    open_position_count=open_count,
+                )
+                if not allowed:
+                    logger.info("Risk blocked BUY for %s: %s", symbol, block_reason)
+                    return
+
+                # Execute buy and tag position with entry_indicator
+                full_snapshot["entry_indicator"] = buy_indicator
+                full_snapshot["entry_signal"] = "buy"
+                await self._execute_buy(
+                    symbol, current_price, full_snapshot, entry_indicator=buy_indicator
+                )
 
         except Exception as e:
             logger.error("Error processing %s for bot %s: %s", symbol, self.bot_id[:8], e)
 
-    async def _execute_trade(
+    async def _execute_buy(
         self,
         symbol: str,
-        signal: Signal,
         current_price: float,
         indicators_snapshot: dict[str, Any] | None,
+        entry_indicator: str = "",
     ) -> None:
         """
-        Execute a trade: calculate size → submit order → record in DB → emit WS events.
+        Execute a BUY: calculate size -> submit order -> record in DB -> emit WS events.
+        Tags the new position with the entry_indicator that triggered the buy.
         """
         if not alpaca_client:
             return
 
         risk_config = self.config.get("risk_management", {})
         bot_capital = self.config.get("capital", 0)
-        side = "buy" if signal == Signal.BUY else "sell"
 
-        # --- For SELL: check if we have an open position to sell ---
-        if signal == Signal.SELL:
-            await self._execute_sell(symbol, current_price, indicators_snapshot)
-            return
-
-        # --- For BUY: calculate position size and submit order ---
         qty = risk_manager.calculate_position_size(bot_capital, current_price, risk_config)
         if qty <= 0:
             logger.info("Position size 0 for %s, skipping buy", symbol)
@@ -296,7 +327,7 @@ class BotRunner:
                 )
                 session.add(trade)
 
-                # Create position record
+                # Create position record — tagged with entry_indicator
                 position = Position(
                     id=generate_uuid(),
                     bot_id=self.bot_id,
@@ -309,6 +340,7 @@ class BotRunner:
                     unrealized_pnl=0.0,
                     realized_pnl=0.0,
                     is_open=True,
+                    entry_indicator=entry_indicator,
                 )
                 session.add(position)
                 await session.commit()
@@ -339,11 +371,13 @@ class BotRunner:
                     "realized_pnl": position.realized_pnl,
                     "opened_at": position.opened_at.isoformat(),
                     "is_open": position.is_open,
+                    "entry_indicator": position.entry_indicator,
                 })
 
             logger.info(
-                "BUY executed: %s x%d @ %.2f (order=%s, bot=%s)",
-                symbol, filled_qty, filled_price, order_result["id"][:8], self.bot_id[:8],
+                "BUY executed: %s x%d @ %.2f via %s (order=%s, bot=%s)",
+                symbol, filled_qty, filled_price, entry_indicator,
+                order_result["id"][:8], self.bot_id[:8],
             )
 
         except Exception as e:
@@ -443,6 +477,7 @@ class BotRunner:
                     "opened_at": position.opened_at.isoformat(),
                     "closed_at": position.closed_at.isoformat() if position.closed_at else None,
                     "is_open": position.is_open,
+                    "entry_indicator": position.entry_indicator,
                 })
 
                 logger.info(
@@ -453,6 +488,18 @@ class BotRunner:
 
             except Exception as e:
                 logger.error("Failed to execute SELL for %s: %s", symbol, e)
+
+    async def _get_open_position(self, symbol: str) -> Position | None:
+        """Fetch the open position for this bot+symbol, if any."""
+        async with async_session() as session:
+            result = await session.execute(
+                select(Position).where(
+                    Position.bot_id == self.bot_id,
+                    Position.symbol == symbol,
+                    Position.is_open.is_(True),
+                )
+            )
+            return result.scalar_one_or_none()
 
     # -------------------------------------------------------------------
     # Stop-Loss / Take-Profit monitoring

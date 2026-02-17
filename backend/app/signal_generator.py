@@ -127,6 +127,147 @@ class SignalGenerator:
 
         return final_signal, details
 
+    def evaluate_per_indicator(
+        self,
+        indicators: dict[str, dict[str, Any] | None],
+        config: dict[str, Any],
+    ) -> dict[str, Signal]:
+        """
+        Evaluate each indicator independently and return a mapping of
+        indicator_name -> Signal.
+
+        Unlike evaluate() (majority voting) or evaluate_single() (one indicator),
+        this returns ALL per-indicator signals so the caller can decide what to do
+        with each one.
+
+        Parameters
+        ----------
+        indicators : dict
+            Output of IndicatorCalculator.calculate().
+        config : dict
+            Bot's indicator config.
+
+        Returns
+        -------
+        dict[str, Signal]
+            Mapping of indicator_name -> Signal (BUY/SELL/HOLD).
+            Indicators with insufficient data or errors are omitted.
+        """
+        results: dict[str, Signal] = {}
+
+        for name, values in indicators.items():
+            if values is None:
+                continue  # insufficient data — skip
+            evaluator_name = self._EVALUATORS.get(name)
+            if not evaluator_name:
+                continue  # unknown indicator — skip
+            try:
+                params = config.get(name, {}) or {}
+                evaluator = getattr(self, evaluator_name)
+                results[name] = evaluator(values, params)
+            except Exception as e:
+                logger.error("Error evaluating %s: %s", name, e)
+
+        return results
+
+    def evaluate_single(
+        self,
+        primary_indicator: str,
+        indicators: dict[str, dict[str, Any] | None],
+        config: dict[str, Any],
+    ) -> tuple[Signal, dict[str, Any]]:
+        """
+        Single-indicator evaluation: only the primary indicator drives the signal.
+        All other indicators are recorded in details for monitoring only.
+
+        Parameters
+        ----------
+        primary_indicator : str
+            Key of the primary indicator (e.g. "RSI").
+        indicators : dict
+            Output of IndicatorCalculator.calculate() — indicator name → values dict.
+        config : dict
+            Bot's indicator config (same structure passed to the calculator).
+
+        Returns
+        -------
+        tuple[Signal, dict]
+            Final signal and details dict containing per-indicator values and primary info.
+        """
+        if not indicators:
+            return Signal.HOLD, {
+                "reason": "no_indicators",
+                "primary_indicator": primary_indicator,
+            }
+
+        # Evaluate ALL indicators for monitoring/snapshot
+        per_indicator: dict[str, str] = {}
+        for name, values in indicators.items():
+            if values is None:
+                per_indicator[name] = "insufficient_data"
+                continue
+
+            evaluator_name = self._EVALUATORS.get(name)
+            if not evaluator_name:
+                per_indicator[name] = "unknown_indicator"
+                continue
+
+            try:
+                params = config.get(name, {}) or {}
+                evaluator = getattr(self, evaluator_name)
+                signal = evaluator(values, params)
+                per_indicator[name] = signal.value
+            except Exception as e:
+                logger.error("Error evaluating %s signal: %s", name, e)
+                per_indicator[name] = "error"
+
+        # Use ONLY the primary indicator for the trading decision
+        primary_values = indicators.get(primary_indicator)
+        if primary_values is None:
+            return Signal.HOLD, {
+                "per_indicator": per_indicator,
+                "primary_indicator": primary_indicator,
+                "primary_signal": "insufficient_data",
+                "final_signal": "hold",
+            }
+
+        evaluator_name = self._EVALUATORS.get(primary_indicator)
+        if not evaluator_name:
+            return Signal.HOLD, {
+                "per_indicator": per_indicator,
+                "primary_indicator": primary_indicator,
+                "primary_signal": "unknown_indicator",
+                "final_signal": "hold",
+            }
+
+        try:
+            params = config.get(primary_indicator, {}) or {}
+            evaluator = getattr(self, evaluator_name)
+            final_signal = evaluator(primary_values, params)
+        except Exception as e:
+            logger.error("Error evaluating primary indicator %s: %s", primary_indicator, e)
+            return Signal.HOLD, {
+                "per_indicator": per_indicator,
+                "primary_indicator": primary_indicator,
+                "primary_signal": "error",
+                "final_signal": "hold",
+            }
+
+        details = {
+            "per_indicator": per_indicator,
+            "primary_indicator": primary_indicator,
+            "primary_signal": final_signal.value,
+            "final_signal": final_signal.value,
+        }
+
+        if final_signal != Signal.HOLD:
+            logger.info(
+                "Signal %s from primary indicator %s",
+                final_signal.value, primary_indicator,
+            )
+
+        return final_signal, details
+
     # ------------------------------------------------------------------
     # Majority voting
     # ------------------------------------------------------------------
