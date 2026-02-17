@@ -251,6 +251,13 @@ export const PositionDetail: React.FC<PositionDetailProps> = ({
             label="Duration"
             value={durationStr}
           />
+          {position.entry_indicator && (
+            <DetailItem
+              label="Entry Indicator"
+              value={position.entry_indicator}
+              valueColor="info.main"
+            />
+          )}
         </Box>
 
         {/* Risk level chips */}
@@ -284,6 +291,14 @@ export const PositionDetail: React.FC<PositionDetailProps> = ({
             size="small"
             color={pnlPercent >= 0 ? 'success' : 'error'}
           />
+          {position.entry_indicator && (
+            <Chip
+              label={`Entry: ${position.entry_indicator}`}
+              size="small"
+              color="info"
+              variant="outlined"
+            />
+          )}
         </Box>
 
         <Divider />

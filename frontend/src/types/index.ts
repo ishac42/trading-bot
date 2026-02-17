@@ -58,6 +58,7 @@ export interface Position {
   opened_at: string
   closed_at?: string
   is_open: boolean
+  entry_indicator?: string
 }
 
 export interface SummaryStats {

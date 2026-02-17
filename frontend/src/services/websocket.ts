@@ -2,8 +2,8 @@ import { io, Socket } from 'socket.io-client'
 
 const WS_URL = import.meta.env.VITE_WS_URL || 'http://localhost:8000'
 
-// Set to true once the backend socket.io server is implemented (Phase 8)
-const WS_ENABLED = false
+// Backend socket.io server is live — enable WebSocket connections
+const WS_ENABLED = true
 
 export type WebSocketEvent =
   | 'trade_executed'

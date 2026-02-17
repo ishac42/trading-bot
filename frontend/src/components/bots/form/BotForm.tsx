@@ -280,8 +280,8 @@ export const BotForm: React.FC<BotFormProps> = ({
     // Mark all fields as touched so validation shows everywhere
     const allFields = [
       'name', 'capital', 'trading_frequency', 'symbols',
-      'trading_window', 'indicators', 'stop_loss', 'take_profit',
-      'max_position_size', 'max_daily_loss', 'max_concurrent_positions',
+      'trading_window', 'indicators', 'stop_loss',
+      'take_profit', 'max_position_size', 'max_daily_loss', 'max_concurrent_positions',
     ]
     allFields.forEach((f) => touchedRef.current.add(f))
 

@@ -186,6 +186,11 @@ class Position(Base):
     # Status
     is_open: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
+    # Entry-indicator tracking — which indicator triggered the buy (e.g. "RSI", "MACD")
+    entry_indicator: Mapped[str | None] = mapped_column(
+        String(50), nullable=True, default=None
+    )
+
     # Relationships
     bot: Mapped["Bot"] = relationship(back_populates="positions")
 

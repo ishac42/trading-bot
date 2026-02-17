@@ -80,6 +80,9 @@ interface IndicatorConfigSectionProps {
 
 /**
  * IndicatorConfigSection – Checkbox list of indicators with dynamic parameter inputs.
+ *
+ * All enabled indicators are equal — any can trigger a BUY, and the exit
+ * tracks whichever indicator opened the position (entry-indicator tracking).
  */
 export const IndicatorConfigSection: React.FC<IndicatorConfigSectionProps> = ({
   indicators,
@@ -121,7 +124,8 @@ export const IndicatorConfigSection: React.FC<IndicatorConfigSectionProps> = ({
         Technical Indicators
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Select indicators to use for trading signals
+        Enable one or more indicators. Any indicator can trigger a buy, and the
+        exit will be driven by whichever indicator opened the position.
       </Typography>
 
       {error && (
