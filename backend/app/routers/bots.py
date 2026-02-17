@@ -21,6 +21,7 @@ from app.models import Bot
 from app.schemas import BotCreateSchema, BotResponseSchema, BotUpdateSchema
 from app.models import utcnow, generate_uuid
 from app.websocket_manager import ws_manager
+from app.trading_engine import trading_engine
 
 router = APIRouter(prefix="/bots", tags=["bots"])
 
@@ -134,13 +135,14 @@ async def delete_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.post("/{bot_id}/start")
 async def start_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
-    """Start a bot — sets status='running', is_active=true."""
+    """Start a bot — sets status='running', is_active=true, registers with TradingEngine."""
     bot = await db.get(Bot, bot_id)
     if not bot:
         raise HTTPException(status_code=404, detail="Bot not found")
 
     bot.status = "running"
     bot.is_active = True
+    bot.error_count = 0
     bot.updated_at = utcnow()
     await db.flush()
 
@@ -151,17 +153,21 @@ async def start_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
         "is_active": bot.is_active,
     })
 
-    # TODO: Phase 10 — register bot with TradingEngine
+    # Register bot with the TradingEngine — starts its trading loop
+    await trading_engine.register_bot(bot.id)
 
     return {"success": True}
 
 
 @router.post("/{bot_id}/stop")
 async def stop_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
-    """Stop a bot — sets status='stopped', is_active=false."""
+    """Stop a bot — sets status='stopped', is_active=false, unregisters from TradingEngine."""
     bot = await db.get(Bot, bot_id)
     if not bot:
         raise HTTPException(status_code=404, detail="Bot not found")
+
+    # Unregister bot from the TradingEngine first (cancels trading loop)
+    await trading_engine.unregister_bot(bot.id)
 
     bot.status = "stopped"
     bot.is_active = False
@@ -175,14 +181,12 @@ async def stop_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
         "is_active": bot.is_active,
     })
 
-    # TODO: Phase 10 — unregister bot from TradingEngine
-
     return {"success": True}
 
 
 @router.post("/{bot_id}/pause")
 async def pause_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
-    """Pause a bot — sets status='paused'."""
+    """Pause a bot — sets status='paused', pauses the trading loop."""
     bot = await db.get(Bot, bot_id)
     if not bot:
         raise HTTPException(status_code=404, detail="Bot not found")
@@ -191,6 +195,9 @@ async def pause_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
     bot.updated_at = utcnow()
     await db.flush()
 
+    # Pause the bot in the TradingEngine (loop continues but skips trading)
+    trading_engine.pause_bot(bot.id)
+
     # Broadcast status change to all connected WebSocket clients
     await ws_manager.emit_bot_status_changed({
         "id": bot.id,
@@ -198,6 +205,31 @@ async def pause_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
         "is_active": bot.is_active,
     })
 
-    # TODO: Phase 10 — pause bot in TradingEngine
+    return {"success": True}
+
+
+@router.post("/{bot_id}/resume")
+async def resume_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
+    """Resume a paused bot — sets status='running', resumes the trading loop."""
+    bot = await db.get(Bot, bot_id)
+    if not bot:
+        raise HTTPException(status_code=404, detail="Bot not found")
+
+    if bot.status != "paused":
+        raise HTTPException(status_code=400, detail="Bot is not paused")
+
+    bot.status = "running"
+    bot.updated_at = utcnow()
+    await db.flush()
+
+    # Resume the bot in the TradingEngine
+    trading_engine.resume_bot(bot.id)
+
+    # Broadcast status change to all connected WebSocket clients
+    await ws_manager.emit_bot_status_changed({
+        "id": bot.id,
+        "status": bot.status,
+        "is_active": bot.is_active,
+    })
 
     return {"success": True}
