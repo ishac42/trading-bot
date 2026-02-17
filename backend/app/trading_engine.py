@@ -8,12 +8,12 @@ Architecture:
          └── BotRunner (one per active bot)
               └── _trading_loop  — runs every trading_frequency seconds
                    1. Check trading window (bot's start/end hours in ET)
-                   2. For each symbol: fetch bars → evaluate signal → execute trade
+                   2. For each symbol: fetch bars → calculate indicators →
+                      generate signal → validate risk → execute trade
                    3. Update last_run_at in DB
                    4. Handle errors (increment error_count, auto-stop on threshold)
 
-Signal evaluation is stubbed until Sprint C (indicators/signals/risk).
-The stub always returns HOLD so no trades fire, but the full pipeline runs.
+Full pipeline: indicators → signal_generator → risk_manager → Alpaca order.
 """
 
 from __future__ import annotations
@@ -21,7 +21,6 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
-from enum import Enum
 from typing import Any
 
 from sqlalchemy import select
@@ -31,6 +30,9 @@ from app.alpaca_client import alpaca_client, AlpacaClient
 from app.database import async_session
 from app.models import Bot, Trade, Position, generate_uuid, utcnow
 from app.websocket_manager import ws_manager
+from app.indicators import indicator_calculator
+from app.signal_generator import signal_generator, Signal
+from app.risk_manager import risk_manager
 
 logger = logging.getLogger(__name__)
 
@@ -41,66 +43,6 @@ logger = logging.getLogger(__name__)
 MAX_ERROR_COUNT = 5  # Auto-stop bot after this many consecutive errors
 MARKET_MONITOR_INTERVAL = 60  # Seconds between market clock checks
 ET_OFFSET = timedelta(hours=-5)  # EST offset from UTC (simplified; real ET is -5/-4)
-
-
-# ---------------------------------------------------------------------------
-# Signal stub — replaced by Sprint C (signal_generator.py)
-# ---------------------------------------------------------------------------
-
-class Signal(str, Enum):
-    BUY = "buy"
-    SELL = "sell"
-    HOLD = "hold"
-
-
-def evaluate_signal_stub(
-    bars: list[dict[str, Any]],
-    indicators_config: dict[str, Any],
-) -> tuple[Signal, dict[str, Any] | None]:
-    """
-    Stub signal evaluator — always returns HOLD.
-    Sprint C will replace this with real indicator calculations + signal generation.
-
-    Returns:
-        (signal, indicators_snapshot) — HOLD + None until Sprint C.
-    """
-    return Signal.HOLD, None
-
-
-def calculate_position_size_stub(
-    bot_capital: float,
-    current_price: float,
-    risk_config: dict[str, Any],
-) -> int:
-    """
-    Stub position sizer — calculates shares based on max_position_size % of capital.
-    Sprint C will replace this with the full RiskManager.
-
-    Returns:
-        Number of shares to buy.
-    """
-    max_pct = risk_config.get("max_position_size", 0.1)  # default 10%
-    allocation = bot_capital * max_pct
-    if current_price <= 0:
-        return 0
-    qty = int(allocation / current_price)
-    return max(qty, 0)
-
-
-def calculate_stop_loss_stub(entry_price: float, risk_config: dict[str, Any]) -> float | None:
-    """Calculate stop-loss price from config."""
-    sl_pct = risk_config.get("stop_loss", 0)
-    if sl_pct > 0:
-        return round(entry_price * (1 - sl_pct / 100), 2)
-    return None
-
-
-def calculate_take_profit_stub(entry_price: float, risk_config: dict[str, Any]) -> float | None:
-    """Calculate take-profit price from config."""
-    tp_pct = risk_config.get("take_profit", 0)
-    if tp_pct > 0:
-        return round(entry_price * (1 + tp_pct / 100), 2)
-    return None
 
 
 # ---------------------------------------------------------------------------
@@ -196,7 +138,10 @@ class BotRunner:
                     logger.debug("Market closed, bot '%s' skipping cycle", bot_name)
                     continue
 
-                # Process each symbol
+                # Check stop-loss / take-profit on existing positions first
+                await self._check_stop_loss_take_profit()
+
+                # Process each symbol (indicators → signal → risk → trade)
                 for symbol in symbols:
                     await self._process_symbol(symbol)
 
@@ -221,36 +166,70 @@ class BotRunner:
 
     async def _process_symbol(self, symbol: str) -> None:
         """
-        Process a single symbol: fetch bars → evaluate signal → execute if BUY/SELL.
+        Full trading pipeline for a single symbol:
+          1. Fetch recent bars from Alpaca
+          2. Calculate technical indicators
+          3. Generate trading signal (majority vote)
+          4. Validate against risk rules
+          5. Execute trade if signal passes
         """
         if not alpaca_client:
             return
 
         try:
-            # 1. Fetch recent bars
+            # 1. Fetch recent bars (50 x 1-min bars gives enough history for most indicators)
             bars = await alpaca_client.get_bars(symbol, timeframe="1Min", limit=50)
             if not bars:
                 logger.debug("No bars returned for %s, skipping", symbol)
                 return
 
-            # 2. Evaluate signal (stub until Sprint C)
-            signal, indicators_snapshot = evaluate_signal_stub(
-                bars, self.config.get("indicators", {})
+            # 2. Calculate indicators
+            indicators_config = self.config.get("indicators", {})
+            indicators_snapshot = indicator_calculator.calculate(bars, indicators_config)
+
+            # 3. Generate signal via majority voting
+            signal, signal_details = signal_generator.evaluate(
+                indicators_snapshot, indicators_config
             )
 
-            # 3. Skip if HOLD
+            # 4. Skip if HOLD
             if signal == Signal.HOLD:
                 logger.debug("Signal HOLD for %s, no action", symbol)
                 return
 
-            # 4. Get current price
+            # 5. Get current price
             current_price = await alpaca_client.get_latest_price(symbol)
             if current_price <= 0:
                 logger.warning("Invalid price for %s: %.2f, skipping", symbol, current_price)
                 return
 
-            # 5. Execute trade
-            await self._execute_trade(symbol, signal, current_price, indicators_snapshot)
+            # 6. Validate against risk rules (only blocks BUY; SELL always allowed)
+            today_pnl = await self.engine.get_bot_today_pnl(self.bot_id)
+            open_count = await self._count_open_positions()
+
+            allowed, block_reason = await risk_manager.validate(
+                signal=signal,
+                bot_config=self.config,
+                symbol=symbol,
+                current_price=current_price,
+                today_pnl=today_pnl,
+                open_position_count=open_count,
+            )
+            if not allowed:
+                logger.info(
+                    "Risk manager blocked %s for %s: %s",
+                    signal.value, symbol, block_reason,
+                )
+                return
+
+            # 7. Merge indicator snapshot + signal details for DB storage
+            full_snapshot = {
+                "indicators": indicators_snapshot,
+                "signal_details": signal_details,
+            }
+
+            # 8. Execute trade
+            await self._execute_trade(symbol, signal, current_price, full_snapshot)
 
         except Exception as e:
             logger.error("Error processing %s for bot %s: %s", symbol, self.bot_id[:8], e)
@@ -278,21 +257,10 @@ class BotRunner:
             return
 
         # --- For BUY: calculate position size and submit order ---
-        qty = calculate_position_size_stub(bot_capital, current_price, risk_config)
+        qty = risk_manager.calculate_position_size(bot_capital, current_price, risk_config)
         if qty <= 0:
             logger.info("Position size 0 for %s, skipping buy", symbol)
             return
-
-        # Check max concurrent positions
-        max_positions = risk_config.get("max_concurrent_positions")
-        if max_positions:
-            open_count = await self._count_open_positions()
-            if open_count >= max_positions:
-                logger.info(
-                    "Bot %s at max positions (%d/%d), skipping buy for %s",
-                    self.bot_id[:8], open_count, max_positions, symbol,
-                )
-                return
 
         try:
             # Submit market order via Alpaca
@@ -309,8 +277,8 @@ class BotRunner:
             status = order_status.get("status", "pending")
 
             # Calculate stop-loss and take-profit
-            stop_loss = calculate_stop_loss_stub(filled_price, risk_config)
-            take_profit = calculate_take_profit_stub(filled_price, risk_config)
+            stop_loss = risk_manager.calculate_stop_loss(filled_price, risk_config)
+            take_profit = risk_manager.calculate_take_profit(filled_price, risk_config)
 
             # Record trade in DB
             async with async_session() as session:
@@ -485,6 +453,78 @@ class BotRunner:
 
             except Exception as e:
                 logger.error("Failed to execute SELL for %s: %s", symbol, e)
+
+    # -------------------------------------------------------------------
+    # Stop-Loss / Take-Profit monitoring
+    # -------------------------------------------------------------------
+
+    async def _check_stop_loss_take_profit(self) -> None:
+        """
+        Check all open positions for this bot against their SL/TP levels.
+        Auto-sell any position where current price has breached the threshold.
+        """
+        if not alpaca_client:
+            return
+
+        try:
+            async with async_session() as session:
+                result = await session.execute(
+                    select(Position).where(
+                        Position.bot_id == self.bot_id,
+                        Position.is_open.is_(True),
+                    )
+                )
+                positions = result.scalars().all()
+
+            for pos in positions:
+                try:
+                    current_price = await alpaca_client.get_latest_price(pos.symbol)
+                    if current_price <= 0:
+                        continue
+
+                    trigger_sell = False
+                    reason = ""
+
+                    # Check stop-loss
+                    if pos.stop_loss_price and current_price <= pos.stop_loss_price:
+                        trigger_sell = True
+                        reason = f"stop_loss ({current_price:.2f} <= {pos.stop_loss_price:.2f})"
+
+                    # Check take-profit
+                    if pos.take_profit_price and current_price >= pos.take_profit_price:
+                        trigger_sell = True
+                        reason = f"take_profit ({current_price:.2f} >= {pos.take_profit_price:.2f})"
+
+                    if trigger_sell:
+                        logger.info(
+                            "SL/TP triggered for %s: %s (bot=%s)",
+                            pos.symbol, reason, self.bot_id[:8],
+                        )
+                        await self._execute_sell(pos.symbol, current_price, {
+                            "trigger": reason,
+                            "stop_loss_price": pos.stop_loss_price,
+                            "take_profit_price": pos.take_profit_price,
+                        })
+                    else:
+                        # Update unrealized P&L
+                        unrealized = round(
+                            (current_price - pos.entry_price) * pos.quantity, 2
+                        )
+                        async with async_session() as session:
+                            db_pos = await session.get(Position, pos.id)
+                            if db_pos and db_pos.is_open:
+                                db_pos.current_price = current_price
+                                db_pos.unrealized_pnl = unrealized
+                                await session.commit()
+
+                except Exception as e:
+                    logger.error(
+                        "Error checking SL/TP for %s (pos=%s): %s",
+                        pos.symbol, pos.id[:8], e,
+                    )
+
+        except Exception as e:
+            logger.error("Error in SL/TP check for bot %s: %s", self.bot_id[:8], e)
 
     # -------------------------------------------------------------------
     # Helpers
