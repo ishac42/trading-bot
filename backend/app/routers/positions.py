@@ -7,19 +7,19 @@ Endpoints:
   POST /api/positions/{id}/close → close a position (executes sell via Alpaca)
 """
 
-import logging
-
-from fastapi import APIRouter, Depends, HTTPException, Query
+import structlog
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.exceptions import NotFoundError, BadRequestError, ExternalServiceError
 from app.models import Position, Trade, utcnow, generate_uuid
 from app.schemas import PositionResponseSchema
 from app.websocket_manager import ws_manager
 from app.alpaca_client import alpaca_client
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/positions", tags=["positions"])
 
@@ -88,7 +88,7 @@ async def get_position(position_id: str, db: AsyncSession = Depends(get_db)):
     """Get a single position by ID."""
     position = await db.get(Position, position_id)
     if not position:
-        raise HTTPException(status_code=404, detail="Position not found")
+        raise NotFoundError("Position", position_id)
     return _position_to_response(position)
 
 
@@ -104,9 +104,9 @@ async def close_position(position_id: str, db: AsyncSession = Depends(get_db)):
     """
     position = await db.get(Position, position_id)
     if not position:
-        raise HTTPException(status_code=404, detail="Position not found")
+        raise NotFoundError("Position", position_id)
     if not position.is_open:
-        raise HTTPException(status_code=400, detail="Position is already closed")
+        raise BadRequestError("Position is already closed", error_code="POSITION_ALREADY_CLOSED")
 
     now = utcnow()
     order_id = None
@@ -135,13 +135,12 @@ async def close_position(position_id: str, db: AsyncSession = Depends(get_db)):
                 sell_price = order_status["filled_avg_price"]
         except Exception as e:
             logger.error(
-                "Alpaca sell order failed for position %s (%s): %s",
-                position_id[:8], position.symbol, e,
+                "alpaca_sell_failed",
+                position_id=position_id,
+                symbol=position.symbol,
+                error=str(e),
             )
-            raise HTTPException(
-                status_code=502,
-                detail=f"Failed to execute sell order via Alpaca: {e}",
-            )
+            raise ExternalServiceError("Alpaca", f"Failed to execute sell order: {e}")
 
     # --- Update position ---
     profit_loss = round((sell_price - position.entry_price) * position.quantity, 2)

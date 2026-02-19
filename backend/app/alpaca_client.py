@@ -21,9 +21,10 @@ Safety:
 from __future__ import annotations
 
 import asyncio
-import logging
 from datetime import datetime, timedelta
 from typing import Any, Callable
+
+import structlog
 
 from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import (
@@ -41,7 +42,7 @@ from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 
 from app.config import settings
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # Constants

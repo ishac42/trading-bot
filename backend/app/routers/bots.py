@@ -12,16 +12,20 @@ Endpoints:
   POST   /api/bots/{id}/pause → pause a bot
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+import structlog
+from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.exceptions import NotFoundError, ConflictError, BadRequestError
 from app.models import Bot
 from app.schemas import BotCreateSchema, BotResponseSchema, BotUpdateSchema
 from app.models import utcnow, generate_uuid
 from app.websocket_manager import ws_manager
 from app.trading_engine import trading_engine
+
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/bots", tags=["bots"])
 
@@ -89,7 +93,7 @@ async def get_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
     """Get a single bot by ID."""
     bot = await db.get(Bot, bot_id)
     if not bot:
-        raise HTTPException(status_code=404, detail="Bot not found")
+        raise NotFoundError("Bot", bot_id)
     return _bot_to_response(bot)
 
 
@@ -100,7 +104,7 @@ async def update_bot(
     """Update an existing bot's configuration."""
     bot = await db.get(Bot, bot_id)
     if not bot:
-        raise HTTPException(status_code=404, detail="Bot not found")
+        raise NotFoundError("Bot", bot_id)
 
     bot.name = data.name
     bot.capital = data.capital
@@ -124,11 +128,9 @@ async def delete_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
     """Delete a bot (only if stopped). Cascades to trades and positions."""
     bot = await db.get(Bot, bot_id)
     if not bot:
-        raise HTTPException(status_code=404, detail="Bot not found")
+        raise NotFoundError("Bot", bot_id)
     if bot.status == "running":
-        raise HTTPException(
-            status_code=400, detail="Cannot delete a running bot. Stop it first."
-        )
+        raise ConflictError("Cannot delete a running bot. Stop it first.", error_code="BOT_RUNNING")
     await db.delete(bot)
     return {"success": True}
 
@@ -138,7 +140,7 @@ async def start_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
     """Start a bot — sets status='running', is_active=true, registers with TradingEngine."""
     bot = await db.get(Bot, bot_id)
     if not bot:
-        raise HTTPException(status_code=404, detail="Bot not found")
+        raise NotFoundError("Bot", bot_id)
 
     bot.status = "running"
     bot.is_active = True
@@ -164,7 +166,7 @@ async def stop_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
     """Stop a bot — sets status='stopped', is_active=false, unregisters from TradingEngine."""
     bot = await db.get(Bot, bot_id)
     if not bot:
-        raise HTTPException(status_code=404, detail="Bot not found")
+        raise NotFoundError("Bot", bot_id)
 
     # Unregister bot from the TradingEngine first (cancels trading loop)
     await trading_engine.unregister_bot(bot.id)
@@ -189,7 +191,7 @@ async def pause_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
     """Pause a bot — sets status='paused', pauses the trading loop."""
     bot = await db.get(Bot, bot_id)
     if not bot:
-        raise HTTPException(status_code=404, detail="Bot not found")
+        raise NotFoundError("Bot", bot_id)
 
     bot.status = "paused"
     bot.updated_at = utcnow()
@@ -213,10 +215,10 @@ async def resume_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
     """Resume a paused bot — sets status='running', resumes the trading loop."""
     bot = await db.get(Bot, bot_id)
     if not bot:
-        raise HTTPException(status_code=404, detail="Bot not found")
+        raise NotFoundError("Bot", bot_id)
 
     if bot.status != "paused":
-        raise HTTPException(status_code=400, detail="Bot is not paused")
+        raise BadRequestError("Bot is not paused", error_code="BOT_NOT_PAUSED")
 
     bot.status = "running"
     bot.updated_at = utcnow()

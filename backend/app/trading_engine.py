@@ -19,9 +19,10 @@ Full pipeline: indicators → signal_generator → risk_manager → Alpaca order
 from __future__ import annotations
 
 import asyncio
-import logging
 from datetime import datetime, timezone, timedelta
 from typing import Any
+
+import structlog
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,7 +35,7 @@ from app.indicators import indicator_calculator
 from app.signal_generator import signal_generator, Signal
 from app.risk_manager import risk_manager
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # Constants

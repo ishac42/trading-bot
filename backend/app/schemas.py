@@ -18,6 +18,23 @@ from pydantic import BaseModel, ConfigDict
 
 
 # =============================================================================
+# Error Response — consistent error shape for all endpoints
+# =============================================================================
+
+class ErrorDetailSchema(BaseModel):
+    """Inner error payload returned by all error responses."""
+    code: str
+    message: str
+    details: dict[str, Any] | None = None
+    request_id: str | None = None
+
+
+class ErrorResponseSchema(BaseModel):
+    """Top-level error wrapper."""
+    error: ErrorDetailSchema
+
+
+# =============================================================================
 # Risk Management — shared sub-schema
 # =============================================================================
 

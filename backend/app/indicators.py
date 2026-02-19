@@ -19,13 +19,14 @@ results can be stored directly in Trade.indicators_snapshot.
 
 from __future__ import annotations
 
-import logging
 from typing import Any
+
+import structlog
 
 import numpy as np
 import pandas as pd
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # Minimum number of bars required for *any* calculation
 MIN_BARS = 5

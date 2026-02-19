@@ -7,42 +7,56 @@ FastAPI application entry point.
 - Provides /api/health endpoint
 - Startup/shutdown lifecycle events for database connection
 - Starts/stops TradingEngine on application lifecycle
+- Structured logging via structlog
+- Global exception handlers + request-ID middleware
 """
 
 from contextlib import asynccontextmanager
 
+import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import engine
+from app.logging_config import configure_logging
+from app.middleware import register_middleware_and_handlers
 from app.routers import bots, trades, positions, market_data
 from app.websocket_manager import socket_app
 from app.alpaca_client import alpaca_client
 from app.trading_engine import trading_engine
 
+logger = structlog.get_logger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application startup and shutdown lifecycle."""
-    # Startup
-    print(f"Starting {settings.APP_NAME} ({settings.ENVIRONMENT})")
-    print("[WebSocket] Socket.IO server mounted at /ws")
-    if alpaca_client:
-        print(f"[Alpaca] Connected (paper={alpaca_client.is_paper})")
-    else:
-        print("[Alpaca] Not configured — market data/trading disabled")
+    configure_logging(
+        environment=settings.ENVIRONMENT,
+        log_level=settings.LOG_LEVEL,
+    )
 
-    # Start the trading engine (loads running bots, starts market monitor)
+    logger.info(
+        "app_starting",
+        app_name=settings.APP_NAME,
+        environment=settings.ENVIRONMENT,
+    )
+    logger.info("websocket_mounted", path="/ws")
+
+    if alpaca_client:
+        logger.info("alpaca_connected", paper=alpaca_client.is_paper)
+    else:
+        logger.warning("alpaca_not_configured")
+
     await trading_engine.start()
-    print(f"[TradingEngine] Started — {len(trading_engine.bots)} bot(s) loaded")
+    logger.info("trading_engine_started", bots_loaded=len(trading_engine.bots))
 
     yield
 
-    # Shutdown
-    print("Shutting down...")
+    logger.info("app_shutting_down")
     await trading_engine.stop()
-    print("[TradingEngine] Stopped")
+    logger.info("trading_engine_stopped")
     await engine.dispose()
 
 
@@ -51,6 +65,9 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+# Exception handlers + Request ID / Request Logging middleware
+register_middleware_and_handlers(app)
 
 # CORS — allow frontend dev servers
 app.add_middleware(

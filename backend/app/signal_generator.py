@@ -12,11 +12,12 @@ The generator is stateless and operates on a single snapshot at a time.
 
 from __future__ import annotations
 
-import logging
 from enum import Enum
 from typing import Any
 
-logger = logging.getLogger(__name__)
+import structlog
+
+logger = structlog.get_logger(__name__)
 
 
 class Signal(str, Enum):
