@@ -9,7 +9,7 @@ Endpoints:
 
 import structlog
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -18,6 +18,7 @@ from app.models import Position, Trade, utcnow, generate_uuid
 from app.schemas import PositionResponseSchema
 from app.websocket_manager import ws_manager
 from app.alpaca_client import alpaca_client
+from app.trading_engine import generate_client_order_id, trading_engine
 
 logger = structlog.get_logger(__name__)
 
@@ -83,6 +84,61 @@ async def get_positions(
     return [_position_to_response(pos) for pos in positions]
 
 
+@router.get("/unmanaged")
+async def get_unmanaged_positions(db: AsyncSession = Depends(get_db)):
+    """
+    Detect positions in Alpaca that are not fully tracked in our DB.
+
+    Compares Alpaca's actual positions (per symbol) against the sum of
+    our open DB positions per symbol. Any excess quantity is "unmanaged."
+    """
+    if not alpaca_client:
+        return []
+
+    try:
+        alpaca_positions = await alpaca_client.get_positions()
+    except Exception as e:
+        logger.error("Failed to fetch Alpaca positions for unmanaged check: %s", e)
+        return []
+
+    # Sum our DB open positions per symbol
+    db_result = await db.execute(
+        select(Position.symbol, func.sum(Position.quantity))
+        .where(Position.is_open.is_(True))
+        .group_by(Position.symbol)
+    )
+    db_qty_map: dict[str, int] = {row[0]: int(row[1]) for row in db_result}
+
+    unmanaged = []
+    for ap in alpaca_positions:
+        alpaca_qty = int(ap["qty"])
+        db_qty = db_qty_map.get(ap["symbol"], 0)
+        diff = alpaca_qty - db_qty
+
+        if diff > 0:
+            unmanaged.append({
+                "id": f"unmanaged-{ap['symbol']}",
+                "bot_id": None,
+                "symbol": ap["symbol"],
+                "quantity": diff,
+                "entry_price": float(ap["avg_entry_price"]),
+                "current_price": float(ap["current_price"]),
+                "stop_loss_price": None,
+                "take_profit_price": None,
+                "unrealized_pnl": round(
+                    (float(ap["current_price"]) - float(ap["avg_entry_price"])) * diff, 2
+                ),
+                "realized_pnl": 0.0,
+                "opened_at": None,
+                "closed_at": None,
+                "is_open": True,
+                "entry_indicator": None,
+                "managed": False,
+            })
+
+    return unmanaged
+
+
 @router.get("/{position_id}", response_model=PositionResponseSchema)
 async def get_position(position_id: str, db: AsyncSession = Depends(get_db)):
     """Get a single position by ID."""
@@ -93,7 +149,11 @@ async def get_position(position_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{position_id}/close")
-async def close_position(position_id: str, db: AsyncSession = Depends(get_db)):
+async def close_position(
+    position_id: str,
+    pause_bot: bool = Query(True),
+    db: AsyncSession = Depends(get_db),
+):
     """
     Close an open position:
     1. Submit sell order via Alpaca (if available)
@@ -110,9 +170,9 @@ async def close_position(position_id: str, db: AsyncSession = Depends(get_db)):
 
     now = utcnow()
     order_id = None
-    sell_price = position.current_price  # fallback if Alpaca unavailable
+    sell_price = position.current_price
+    coid = generate_client_order_id(position.bot_id)
 
-    # --- Execute sell order via Alpaca ---
     if alpaca_client:
         try:
             order_result = await alpaca_client.submit_market_order(
@@ -120,6 +180,7 @@ async def close_position(position_id: str, db: AsyncSession = Depends(get_db)):
                 qty=position.quantity,
                 side="sell",
                 time_in_force="day",
+                client_order_id=coid,
             )
             order_id = order_result["id"]
             logger.info(
@@ -150,7 +211,6 @@ async def close_position(position_id: str, db: AsyncSession = Depends(get_db)):
     position.realized_pnl = profit_loss
     position.unrealized_pnl = 0.0
 
-    # --- Create sell trade record ---
     sell_trade = Trade(
         id=generate_uuid(),
         bot_id=position.bot_id,
@@ -162,6 +222,8 @@ async def close_position(position_id: str, db: AsyncSession = Depends(get_db)):
         profit_loss=profit_loss,
         order_id=order_id,
         status="filled",
+        client_order_id=coid,
+        reason="Manual close",
     )
     db.add(sell_trade)
     await db.flush()
@@ -182,4 +244,28 @@ async def close_position(position_id: str, db: AsyncSession = Depends(get_db)):
         "order_id": sell_trade.order_id,
     })
 
-    return {"success": True}
+    # Auto-pause the owning bot so it doesn't immediately re-enter
+    bot_name = None
+    if pause_bot and position.bot_id:
+        try:
+            from app.models import Bot
+            bot = await db.get(Bot, position.bot_id)
+            if bot and bot.status == "running":
+                bot.status = "paused"
+                bot.updated_at = utcnow()
+                await db.flush()
+                trading_engine.pause_bot(bot.id)
+                bot_name = bot.name
+                await ws_manager.emit_bot_status_changed({
+                    "id": bot.id,
+                    "status": bot.status,
+                    "is_active": bot.is_active,
+                })
+                logger.info(
+                    "Auto-paused bot '%s' after manual close of %s",
+                    bot.name, position.symbol,
+                )
+        except Exception as e:
+            logger.error("Failed to auto-pause bot %s: %s", position.bot_id, e)
+
+    return {"success": True, "bot_paused": bot_name is not None, "bot_name": bot_name}

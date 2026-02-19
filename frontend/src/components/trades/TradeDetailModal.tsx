@@ -8,7 +8,7 @@ import {
 import { Modal, PnLDisplay } from '@/components/common'
 import type { Trade } from '@/types'
 import { formatCurrency } from '@/utils/formatters'
-import { getBotName } from '@/mocks/dashboardData'
+import { useBots } from '@/hooks/useBots'
 
 interface TradeDetailModalProps {
   trade: Trade | null
@@ -50,6 +50,10 @@ export const TradeDetailModal: React.FC<TradeDetailModalProps> = ({
   open,
   onClose,
 }) => {
+  const { data: bots } = useBots()
+  const getBotName = (botId: string) =>
+    bots?.find((b) => b.id === botId)?.name || 'Unknown Bot'
+
   if (!trade) return null
 
   return (
@@ -131,6 +135,14 @@ export const TradeDetailModal: React.FC<TradeDetailModalProps> = ({
           />
         </DetailRow>
 
+        {trade.reason && (
+          <DetailRow label="Reason">
+            <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
+              {trade.reason}
+            </Typography>
+          </DetailRow>
+        )}
+
         {trade.order_id && (
           <DetailRow label="Order ID">
             <Typography
@@ -138,6 +150,17 @@ export const TradeDetailModal: React.FC<TradeDetailModalProps> = ({
               sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}
             >
               {trade.order_id}
+            </Typography>
+          </DetailRow>
+        )}
+
+        {trade.client_order_id && (
+          <DetailRow label="Client Order ID">
+            <Typography
+              variant="body2"
+              sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}
+            >
+              {trade.client_order_id}
             </Typography>
           </DetailRow>
         )}

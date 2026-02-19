@@ -10,6 +10,7 @@ import type { PositionFilterValues } from '@/components/positions'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 import { EmptyState } from '@/components/common/EmptyState'
 import { usePositions, useClosePosition } from '@/hooks/usePositions'
+import { useUnmanagedPositions } from '@/hooks/usePositions'
 import { useRealtimePositions } from '@/hooks/useRealtimePositions'
 import { useBots } from '@/hooks/useBots'
 import type { Position } from '@/types'
@@ -61,6 +62,7 @@ const Positions: React.FC = () => {
   })
 
   const { data: bots } = useBots()
+  const { data: unmanagedPositions } = useUnmanagedPositions()
   const closePositionMutation = useClosePosition()
 
   // Subscribe to real-time updates
@@ -95,7 +97,7 @@ const Positions: React.FC = () => {
   }
 
   const handleClosePosition = (positionId: string) => {
-    closePositionMutation.mutate(positionId, {
+    closePositionMutation.mutate({ positionId, pauseBot: true }, {
       onSuccess: () => {
         setDetailOpen(false)
         setSelectedPosition(null)
@@ -151,7 +153,11 @@ const Positions: React.FC = () => {
     )
   }
 
-  const positionsList = positions || []
+  const managedPositions = positions || []
+  const unmanaged = (!filters.botId && !filters.symbol)
+    ? (unmanagedPositions || [])
+    : []
+  const positionsList = [...managedPositions, ...unmanaged]
 
   return (
     <Box>

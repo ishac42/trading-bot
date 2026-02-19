@@ -27,6 +27,8 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import uuid as _uuid
+
 from app.alpaca_client import alpaca_client, AlpacaClient
 from app.database import async_session
 from app.models import Bot, Trade, Position, generate_uuid, utcnow
@@ -34,6 +36,12 @@ from app.websocket_manager import ws_manager
 from app.indicators import indicator_calculator
 from app.signal_generator import signal_generator, Signal
 from app.risk_manager import risk_manager
+
+
+def generate_client_order_id(bot_id: str) -> str:
+    """Generate a client_order_id that encodes the bot for traceability."""
+    short_uuid = str(_uuid.uuid4())[:8]
+    return f"bot-{bot_id[:8]}-{short_uuid}"
 
 logger = structlog.get_logger(__name__)
 
@@ -206,7 +214,6 @@ class BotRunner:
                 entry_ind = open_position.entry_indicator or ""
 
                 if not entry_ind:
-                    # Legacy position (no entry_indicator) — fall back to majority vote
                     signal, signal_details = signal_generator.evaluate(
                         indicators_snapshot, indicators_config
                     )
@@ -214,16 +221,21 @@ class BotRunner:
                         current_price = await alpaca_client.get_latest_price(symbol)
                         if current_price > 0:
                             full_snapshot["signal_details"] = signal_details
-                            await self._execute_sell(symbol, current_price, full_snapshot)
+                            await self._execute_sell(
+                                symbol, current_price, full_snapshot,
+                                reason="Majority vote sell signal",
+                            )
                 else:
-                    # Check only the entry indicator's signal
                     entry_signal = per_indicator_signals.get(entry_ind, Signal.HOLD)
                     if entry_signal == Signal.SELL:
                         current_price = await alpaca_client.get_latest_price(symbol)
                         if current_price > 0:
                             full_snapshot["exit_indicator"] = entry_ind
                             full_snapshot["exit_signal"] = entry_signal.value
-                            await self._execute_sell(symbol, current_price, full_snapshot)
+                            await self._execute_sell(
+                                symbol, current_price, full_snapshot,
+                                reason=f"{entry_ind} sell signal",
+                            )
                     else:
                         logger.debug(
                             "Position open for %s via %s — signal is %s, holding",
@@ -295,14 +307,15 @@ class BotRunner:
             return
 
         try:
-            # Submit market order via Alpaca
+            coid = generate_client_order_id(self.bot_id)
+
             order_result = await alpaca_client.submit_market_order(
-                symbol=symbol, qty=qty, side="buy", time_in_force="day"
+                symbol=symbol, qty=qty, side="buy", time_in_force="day",
+                client_order_id=coid,
             )
 
-            # Wait briefly for fill (market orders usually fill instantly)
-            await asyncio.sleep(1)
-            order_status = await alpaca_client.get_order(order_result["id"])
+            # Wait for fill with retries
+            order_status = await self._wait_for_fill(order_result["id"])
 
             filled_price = order_status.get("filled_avg_price") or current_price
             filled_qty = int(order_status.get("filled_qty", 0)) or qty
@@ -312,7 +325,8 @@ class BotRunner:
             stop_loss = risk_manager.calculate_stop_loss(filled_price, risk_config)
             take_profit = risk_manager.calculate_take_profit(filled_price, risk_config)
 
-            # Record trade in DB
+            reason = f"{entry_indicator} buy signal" if entry_indicator else "Buy signal"
+
             async with async_session() as session:
                 trade = Trade(
                     id=generate_uuid(),
@@ -325,6 +339,8 @@ class BotRunner:
                     indicators_snapshot=indicators_snapshot,
                     order_id=order_result["id"],
                     status="filled" if status == "filled" else status,
+                    client_order_id=coid,
+                    reason=reason,
                 )
                 session.add(trade)
 
@@ -389,13 +405,13 @@ class BotRunner:
         symbol: str,
         current_price: float,
         indicators_snapshot: dict[str, Any] | None,
+        reason: str = "Sell signal",
     ) -> None:
         """Close the open position for this symbol if one exists."""
         if not alpaca_client:
             return
 
         async with async_session() as session:
-            # Find open position for this bot + symbol
             result = await session.execute(
                 select(Position).where(
                     Position.bot_id == self.bot_id,
@@ -409,16 +425,17 @@ class BotRunner:
                 return
 
             try:
-                # Submit sell order via Alpaca
+                coid = generate_client_order_id(self.bot_id)
+
                 order_result = await alpaca_client.submit_market_order(
                     symbol=symbol,
                     qty=position.quantity,
                     side="sell",
                     time_in_force="day",
+                    client_order_id=coid,
                 )
 
-                await asyncio.sleep(1)
-                order_status = await alpaca_client.get_order(order_result["id"])
+                order_status = await self._wait_for_fill(order_result["id"])
 
                 filled_price = order_status.get("filled_avg_price") or current_price
                 profit_loss = round((filled_price - position.entry_price) * position.quantity, 2)
@@ -431,7 +448,6 @@ class BotRunner:
                 position.realized_pnl = profit_loss
                 position.unrealized_pnl = 0.0
 
-                # Create sell trade record
                 trade = Trade(
                     id=generate_uuid(),
                     bot_id=self.bot_id,
@@ -444,6 +460,8 @@ class BotRunner:
                     profit_loss=profit_loss,
                     order_id=order_result["id"],
                     status="filled" if order_status.get("status") == "filled" else order_status.get("status", "pending"),
+                    client_order_id=coid,
+                    reason=reason,
                 )
                 session.add(trade)
                 await session.commit()
@@ -531,28 +549,30 @@ class BotRunner:
                         continue
 
                     trigger_sell = False
-                    reason = ""
+                    sell_reason = ""
 
-                    # Check stop-loss
                     if pos.stop_loss_price and current_price <= pos.stop_loss_price:
                         trigger_sell = True
-                        reason = f"stop_loss ({current_price:.2f} <= {pos.stop_loss_price:.2f})"
+                        sell_reason = f"Stop-loss triggered (price ≤ ${pos.stop_loss_price:.2f})"
 
-                    # Check take-profit
                     if pos.take_profit_price and current_price >= pos.take_profit_price:
                         trigger_sell = True
-                        reason = f"take_profit ({current_price:.2f} >= {pos.take_profit_price:.2f})"
+                        sell_reason = f"Take-profit triggered (price ≥ ${pos.take_profit_price:.2f})"
 
                     if trigger_sell:
                         logger.info(
                             "SL/TP triggered for %s: %s (bot=%s)",
-                            pos.symbol, reason, self.bot_id[:8],
+                            pos.symbol, sell_reason, self.bot_id[:8],
                         )
-                        await self._execute_sell(pos.symbol, current_price, {
-                            "trigger": reason,
-                            "stop_loss_price": pos.stop_loss_price,
-                            "take_profit_price": pos.take_profit_price,
-                        })
+                        await self._execute_sell(
+                            pos.symbol, current_price,
+                            {
+                                "trigger": sell_reason,
+                                "stop_loss_price": pos.stop_loss_price,
+                                "take_profit_price": pos.take_profit_price,
+                            },
+                            reason=sell_reason,
+                        )
                     else:
                         # Update unrealized P&L
                         unrealized = round(
@@ -589,6 +609,27 @@ class BotRunner:
         end_minutes = self.config.get("end_hour", 16) * 60 + self.config.get("end_minute", 0)
 
         return start_minutes <= current_minutes <= end_minutes
+
+    async def _wait_for_fill(self, order_id: str, max_attempts: int = 3) -> dict[str, Any]:
+        """
+        Wait for an order to fill, retrying up to max_attempts times.
+        Returns the order status dict.
+        """
+        for attempt in range(max_attempts):
+            await asyncio.sleep(1)
+            order_status = await alpaca_client.get_order(order_id)
+            if order_status.get("status") == "filled":
+                return order_status
+            logger.debug(
+                "Order %s not yet filled (attempt %d/%d, status=%s)",
+                order_id[:8], attempt + 1, max_attempts,
+                order_status.get("status"),
+            )
+        logger.warning(
+            "Order %s not filled after %d attempts (status=%s)",
+            order_id[:8], max_attempts, order_status.get("status"),
+        )
+        return order_status
 
     async def _update_last_run(self) -> None:
         """Update the bot's last_run_at timestamp in the DB."""

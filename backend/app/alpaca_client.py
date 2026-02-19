@@ -131,6 +131,7 @@ class AlpacaClient:
             account = await asyncio.to_thread(self._trading_client.get_account)
             return {
                 "id": str(account.id),
+                "account_number": str(account.account_number) if account.account_number else str(account.id),
                 "status": str(account.status),
                 "buying_power": float(account.buying_power),
                 "equity": float(account.equity),
@@ -154,6 +155,7 @@ class AlpacaClient:
         qty: int,
         side: str,
         time_in_force: str = "day",
+        client_order_id: str | None = None,
     ) -> dict[str, Any]:
         """
         Submit a market order.
@@ -163,6 +165,7 @@ class AlpacaClient:
             qty: Number of shares
             side: 'buy' or 'sell'
             time_in_force: 'day', 'gtc', 'ioc', 'fok'
+            client_order_id: Optional client-side order ID for tracking
 
         Returns:
             Dict with order details (id, status, filled_qty, etc.)
@@ -176,6 +179,7 @@ class AlpacaClient:
                 qty=qty,
                 side=order_side,
                 time_in_force=tif,
+                client_order_id=client_order_id,
             )
             order = await asyncio.to_thread(self._trading_client.submit_order, request)
             result = self._order_to_dict(order)
@@ -195,6 +199,7 @@ class AlpacaClient:
         side: str,
         limit_price: float,
         time_in_force: str = "day",
+        client_order_id: str | None = None,
     ) -> dict[str, Any]:
         """Submit a limit order."""
         try:
@@ -207,6 +212,7 @@ class AlpacaClient:
                 side=order_side,
                 time_in_force=tif,
                 limit_price=limit_price,
+                client_order_id=client_order_id,
             )
             order = await asyncio.to_thread(self._trading_client.submit_order, request)
             result = self._order_to_dict(order)
@@ -461,6 +467,7 @@ class AlpacaClient:
         """Convert an alpaca-py Order object to a plain dict."""
         return {
             "id": str(order.id),
+            "client_order_id": str(order.client_order_id) if order.client_order_id else None,
             "symbol": order.symbol,
             "side": str(order.side.value) if order.side else None,
             "type": str(order.type.value) if order.type else None,

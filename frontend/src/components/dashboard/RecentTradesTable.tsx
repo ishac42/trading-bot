@@ -18,7 +18,7 @@ import { useNavigate } from 'react-router-dom'
 import { Card, Button, PnLDisplay, EmptyState, Modal } from '@/components/common'
 import type { Trade } from '@/types'
 import { formatTime, formatCurrency } from '@/utils/formatters'
-import { getBotName } from '@/mocks/dashboardData'
+import { useBots } from '@/hooks/useBots'
 
 interface RecentTradesTableProps {
   trades?: Trade[]
@@ -28,7 +28,7 @@ interface RecentTradesTableProps {
 /**
  * Trade Detail content shown in modal
  */
-const TradeDetail: React.FC<{ trade: Trade }> = ({ trade }) => (
+const TradeDetail: React.FC<{ trade: Trade; getBotName: (botId: string) => string }> = ({ trade, getBotName }) => (
   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
       <Typography variant="body2" color="text.secondary">
@@ -123,7 +123,8 @@ const TradeDetail: React.FC<{ trade: Trade }> = ({ trade }) => (
 const TradeCardMobile: React.FC<{
   trade: Trade
   onClick: () => void
-}> = ({ trade, onClick }) => (
+  getBotName: (botId: string) => string
+}> = ({ trade, onClick, getBotName }) => (
   <Box
     onClick={onClick}
     sx={{
@@ -199,6 +200,12 @@ export const RecentTradesTable: React.FC<RecentTradesTableProps> = ({
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null)
+  const { data: bots } = useBots()
+
+  const getBotName = useCallback(
+    (botId: string) => bots?.find((b) => b.id === botId)?.name || 'Unknown Bot',
+    [bots]
+  )
 
   const handleRowClick = useCallback((trade: Trade) => {
     setSelectedTrade(trade)
@@ -278,6 +285,7 @@ export const RecentTradesTable: React.FC<RecentTradesTableProps> = ({
               key={trade.id}
               trade={trade}
               onClick={() => handleRowClick(trade)}
+              getBotName={getBotName}
             />
           ))}
         </Box>
@@ -388,7 +396,7 @@ export const RecentTradesTable: React.FC<RecentTradesTableProps> = ({
         }
         maxWidth="xs"
       >
-        {selectedTrade && <TradeDetail trade={selectedTrade} />}
+        {selectedTrade && <TradeDetail trade={selectedTrade} getBotName={getBotName} />}
       </Modal>
     </Box>
   )

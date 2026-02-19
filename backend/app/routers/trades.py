@@ -48,6 +48,8 @@ def _trade_to_response(trade: Trade) -> dict:
         "status": trade.status,
         "commission": trade.commission,
         "slippage": trade.slippage,
+        "client_order_id": trade.client_order_id,
+        "reason": trade.reason,
     }
 
 

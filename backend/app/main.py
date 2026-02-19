@@ -21,7 +21,7 @@ from app.config import settings
 from app.database import engine
 from app.logging_config import configure_logging
 from app.middleware import register_middleware_and_handlers
-from app.routers import bots, trades, positions, market_data
+from app.routers import account, bots, trades, positions, market_data
 from app.websocket_manager import socket_app
 from app.alpaca_client import alpaca_client
 from app.trading_engine import trading_engine
@@ -79,6 +79,7 @@ app.add_middleware(
 )
 
 # Register routers under /api prefix
+app.include_router(account.router, prefix="/api")
 app.include_router(bots.router, prefix="/api")
 app.include_router(trades.router, prefix="/api")
 app.include_router(positions.router, prefix="/api")

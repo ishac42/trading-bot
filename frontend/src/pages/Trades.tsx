@@ -18,6 +18,7 @@ import { useSearchParams } from 'react-router-dom'
 import { TradeFilters, TradeTable, TradeDetailModal, TradeAnalysis } from '@/components/trades'
 import { useTrades } from '@/hooks/useTrades'
 import { useTradeStats } from '@/hooks/useTradeStats'
+import { useBots } from '@/hooks/useBots'
 import { exportTradesToCsv } from '@/utils/csvExport'
 import { mockTrades } from '@/mocks/dashboardData'
 import type {
@@ -98,6 +99,8 @@ const Trades: React.FC = () => {
   // Export feedback
   const [showExportSuccess, setShowExportSuccess] = useState(false)
 
+  const { data: bots } = useBots()
+
   // Data fetching
   const {
     data: tradesData,
@@ -139,7 +142,9 @@ const Trades: React.FC = () => {
           new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
       )
 
-    exportTradesToCsv(allTrades)
+    const getBotName = (botId: string) =>
+      bots?.find((b) => b.id === botId)?.name || 'Unknown Bot'
+    exportTradesToCsv(allTrades, getBotName)
     setShowExportSuccess(true)
     setTimeout(() => setShowExportSuccess(false), 3000)
   }, [filters])

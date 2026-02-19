@@ -1,10 +1,12 @@
 import type { Trade } from '@/types'
-import { getBotName } from '@/mocks/dashboardData'
 
 /**
  * Convert trades to CSV string
  */
-export function tradesToCsv(trades: Trade[]): string {
+export function tradesToCsv(
+  trades: Trade[],
+  getBotName: (botId: string) => string = () => 'Unknown Bot'
+): string {
   const headers = [
     'Trade ID',
     'Timestamp',
@@ -61,8 +63,12 @@ export function downloadCsv(csvContent: string, filename: string): void {
 /**
  * Export trades as a CSV file download
  */
-export function exportTradesToCsv(trades: Trade[], filename?: string): void {
-  const csv = tradesToCsv(trades)
+export function exportTradesToCsv(
+  trades: Trade[],
+  getBotName: (botId: string) => string = () => 'Unknown Bot',
+  filename?: string
+): void {
+  const csv = tradesToCsv(trades, getBotName)
   const defaultFilename = `trades_${new Date().toISOString().split('T')[0]}.csv`
   downloadCsv(csv, filename || defaultFilename)
 }

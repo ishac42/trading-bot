@@ -14,23 +14,53 @@ Endpoints:
 
 import structlog
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.exceptions import NotFoundError, ConflictError, BadRequestError
-from app.models import Bot
+from app.models import Bot, Position
 from app.schemas import BotCreateSchema, BotResponseSchema, BotUpdateSchema
 from app.models import utcnow, generate_uuid
 from app.websocket_manager import ws_manager
 from app.trading_engine import trading_engine
+from app.alpaca_client import alpaca_client
 
 logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/bots", tags=["bots"])
 
 
-def _bot_to_response(bot: Bot) -> dict:
+async def _validate_capital(
+    db: AsyncSession, requested_capital: float, exclude_bot_id: str | None = None
+) -> None:
+    """
+    Validate that the requested capital doesn't exceed available buying power.
+    Raises BadRequestError if validation fails.
+    Silently passes if Alpaca is not configured (allows dev/testing without Alpaca).
+    """
+    if not alpaca_client:
+        return
+
+    try:
+        from app.routers.account import get_allocated_capital
+        account = await alpaca_client.get_account()
+        allocated = await get_allocated_capital(db, exclude_bot_id=exclude_bot_id)
+        available = account["buying_power"] - allocated
+
+        if requested_capital > available:
+            raise BadRequestError(
+                f"Capital ${requested_capital:,.2f} exceeds available buying power "
+                f"(${available:,.2f} available of ${account['buying_power']:,.2f} total)",
+                error_code="CAPITAL_EXCEEDS_BUYING_POWER",
+            )
+    except BadRequestError:
+        raise
+    except Exception as e:
+        logger.warning("Could not validate capital against Alpaca: %s", e)
+
+
+def _bot_to_response(bot: Bot, realized_gains: float = 0.0) -> dict:
     """Convert a Bot ORM model to the response dict with ISO timestamps."""
     return {
         "id": bot.id,
@@ -50,22 +80,34 @@ def _bot_to_response(bot: Bot) -> dict:
         "last_run_at": bot.last_run_at.isoformat() if bot.last_run_at else None,
         "is_active": bot.is_active,
         "error_count": bot.error_count,
+        "realized_gains": round(realized_gains, 2),
     }
 
 
 @router.get("", response_model=list[BotResponseSchema])
 async def get_bots(db: AsyncSession = Depends(get_db)):
-    """List all bots, ordered by created_at descending."""
+    """List all bots, ordered by created_at descending, with realized gains."""
     result = await db.execute(
         select(Bot).order_by(Bot.created_at.desc())
     )
     bots = result.scalars().all()
-    return [_bot_to_response(bot) for bot in bots]
+
+    # Batch-fetch realized gains for all bots in one query
+    gains_result = await db.execute(
+        select(Position.bot_id, func.coalesce(func.sum(Position.realized_pnl), 0.0))
+        .where(Position.is_open.is_(False))
+        .group_by(Position.bot_id)
+    )
+    gains_map = {row[0]: float(row[1]) for row in gains_result}
+
+    return [_bot_to_response(bot, gains_map.get(bot.id, 0.0)) for bot in bots]
 
 
 @router.post("", response_model=BotResponseSchema, status_code=201)
 async def create_bot(data: BotCreateSchema, db: AsyncSession = Depends(get_db)):
     """Create a new bot with status='stopped' and is_active=false."""
+    await _validate_capital(db, data.capital)
+
     bot = Bot(
         id=generate_uuid(),
         name=data.name,
@@ -90,11 +132,13 @@ async def create_bot(data: BotCreateSchema, db: AsyncSession = Depends(get_db)):
 
 @router.get("/{bot_id}", response_model=BotResponseSchema)
 async def get_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
-    """Get a single bot by ID."""
+    """Get a single bot by ID with realized gains."""
     bot = await db.get(Bot, bot_id)
     if not bot:
         raise NotFoundError("Bot", bot_id)
-    return _bot_to_response(bot)
+    from app.routers.account import get_bot_realized_gains
+    gains = await get_bot_realized_gains(db, bot_id)
+    return _bot_to_response(bot, gains)
 
 
 @router.put("/{bot_id}", response_model=BotResponseSchema)
@@ -105,6 +149,8 @@ async def update_bot(
     bot = await db.get(Bot, bot_id)
     if not bot:
         raise NotFoundError("Bot", bot_id)
+
+    await _validate_capital(db, data.capital, exclude_bot_id=bot_id)
 
     bot.name = data.name
     bot.capital = data.capital
@@ -141,6 +187,8 @@ async def start_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
     bot = await db.get(Bot, bot_id)
     if not bot:
         raise NotFoundError("Bot", bot_id)
+
+    await _validate_capital(db, bot.capital, exclude_bot_id=bot_id)
 
     bot.status = "running"
     bot.is_active = True

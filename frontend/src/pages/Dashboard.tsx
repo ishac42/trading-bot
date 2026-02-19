@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import { Box, Typography, Alert, Snackbar } from '@mui/material'
 import { useNavigate } from 'react-router-dom'
-import { SummaryCards, ActiveBotsList, RecentTradesTable } from '@/components/dashboard'
+import { AccountSummary, SummaryCards, ActiveBotsList, RecentTradesTable } from '@/components/dashboard'
 import { useBots, usePauseBot, useStopBot, useStartBot } from '@/hooks/useBots'
 import { useRecentTrades } from '@/hooks/useRecentTrades'
 import { useSummaryStats } from '@/hooks/useSummaryStats'
@@ -131,6 +131,11 @@ const Dashboard = () => {
           again.
         </Alert>
       )}
+
+      {/* Account Overview */}
+      <Box sx={{ mb: { xs: 3, md: 4 } }}>
+        <AccountSummary />
+      </Box>
 
       {/* Summary Cards */}
       <Box sx={{ mb: { xs: 3, md: 4 } }}>

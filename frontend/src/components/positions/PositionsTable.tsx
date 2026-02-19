@@ -13,11 +13,20 @@ import {
   useMediaQuery,
   useTheme,
   Chip,
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
+  Snackbar,
+  Alert,
 } from '@mui/material'
 import type { Position } from '@/types'
 import { formatCurrency, formatRelativeTime } from '@/utils/formatters'
 import { PnLDisplay } from '@/components/common/PnLDisplay'
 import { useBots } from '@/hooks/useBots'
+import { useClosePosition } from '@/hooks/usePositions'
 
 type SortField =
   | 'symbol'
@@ -60,7 +69,46 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
     return map
   }, [bots])
 
-  const getBotName = (botId: string) => botNameMap.get(botId) || 'Unknown Bot'
+  const getBotName = (botId: string | null) => {
+    if (!botId) return null
+    return botNameMap.get(botId) || 'Unknown Bot'
+  }
+
+  const isUnmanaged = (position: Position) => !position.bot_id
+
+  const closePosition = useClosePosition()
+  const [sellTarget, setSellTarget] = useState<Position | null>(null)
+  const [snackbar, setSnackbar] = useState<{
+    open: boolean
+    message: string
+    severity: 'success' | 'error'
+  }>({ open: false, message: '', severity: 'success' })
+
+  const handleSellClick = (e: React.MouseEvent, position: Position) => {
+    e.stopPropagation()
+    setSellTarget(position)
+  }
+
+  const handleConfirmSell = () => {
+    if (!sellTarget) return
+    const botLabel = getBotName(sellTarget.bot_id)
+    closePosition.mutate(
+      { positionId: sellTarget.id, pauseBot: true },
+      {
+        onSuccess: (data: any) => {
+          const msg = data.bot_paused
+            ? `Position closed. Bot '${data.bot_name}' has been paused.`
+            : 'Position closed successfully.'
+          setSnackbar({ open: true, message: msg, severity: 'success' })
+          setSellTarget(null)
+        },
+        onError: () => {
+          setSnackbar({ open: true, message: 'Failed to close position.', severity: 'error' })
+          setSellTarget(null)
+        },
+      }
+    )
+  }
 
   const [sortField, setSortField] = useState<SortField>('opened_at')
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
@@ -93,22 +141,76 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
     return ((aVal as number) - (bVal as number)) * multiplier
   })
 
+  const confirmDialog = (
+    <>
+      <Dialog
+        open={!!sellTarget}
+        onClose={() => setSellTarget(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 700 }}>Emergency Sell</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Sell all <strong>{sellTarget?.quantity}</strong> shares of{' '}
+            <strong>{sellTarget?.symbol}</strong> at market price?
+            {sellTarget?.bot_id && (
+              <> Bot &apos;{getBotName(sellTarget.bot_id)}&apos; will be paused.</>
+            )}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSellTarget(null)}>Cancel</Button>
+          <Button
+            onClick={handleConfirmSell}
+            variant="contained"
+            color="error"
+            disabled={closePosition.isPending}
+          >
+            Sell &amp; Pause Bot
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={5000}
+        onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
+          severity={snackbar.severity}
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+    </>
+  )
+
   if (isMobile) {
     return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {sortedPositions.map((position) => (
-          <PositionCard
-            key={position.id}
-            position={position}
-            onClick={() => onPositionClick(position)}
-            getBotName={getBotName}
-          />
-        ))}
-      </Box>
+      <>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {sortedPositions.map((position) => (
+            <PositionCard
+              key={position.id}
+              position={position}
+              onClick={() => onPositionClick(position)}
+              getBotName={getBotName}
+              onSellClick={handleSellClick}
+              isSelling={closePosition.isPending && sellTarget?.id === position.id}
+            />
+          ))}
+        </Box>
+        {confirmDialog}
+      </>
     )
   }
 
   return (
+    <>
     <TableContainer component={Paper} elevation={1}>
       <Table size="small">
         <TableHead>
@@ -174,6 +276,9 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
               currentOrder={sortOrder}
               onSort={handleSort}
             />
+            <TableCell align="center" sx={{ fontWeight: 'bold', width: 80 }}>
+              Action
+            </TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -183,11 +288,15 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
               position={position}
               onClick={() => onPositionClick(position)}
               getBotName={getBotName}
+              onSellClick={handleSellClick}
+              isSelling={closePosition.isPending && sellTarget?.id === position.id}
             />
           ))}
         </TableBody>
       </Table>
     </TableContainer>
+    {confirmDialog}
+    </>
   )
 }
 
@@ -215,8 +324,10 @@ const SortableHeader: React.FC<{
 const PositionRow: React.FC<{
   position: Position
   onClick: () => void
-  getBotName: (botId: string) => string
-}> = ({ position, onClick, getBotName }) => {
+  getBotName: (botId: string | null) => string | null
+  onSellClick: (e: React.MouseEvent, position: Position) => void
+  isSelling: boolean
+}> = ({ position, onClick, getBotName, onSellClick, isSelling }) => {
   const pnlPercent =
     position.entry_price > 0
       ? ((position.current_price - position.entry_price) /
@@ -250,9 +361,19 @@ const PositionRow: React.FC<{
         </Box>
       </TableCell>
       <TableCell>
-        <Typography variant="body2" color="text.secondary">
-          {getBotName(position.bot_id)}
-        </Typography>
+        {position.bot_id ? (
+          <Typography variant="body2" color="text.secondary">
+            {getBotName(position.bot_id)}
+          </Typography>
+        ) : (
+          <Chip
+            label="Unmanaged"
+            size="small"
+            color="warning"
+            variant="filled"
+            sx={{ height: 22, fontSize: '0.7rem', fontWeight: 600 }}
+          />
+        )}
       </TableCell>
       <TableCell align="right">
         <Typography variant="body1">{position.quantity}</Typography>
@@ -288,8 +409,28 @@ const PositionRow: React.FC<{
       </TableCell>
       <TableCell>
         <Typography variant="body2" color="text.secondary">
-          {formatRelativeTime(position.opened_at)}
+          {position.opened_at ? formatRelativeTime(position.opened_at) : '—'}
         </Typography>
+      </TableCell>
+      <TableCell align="center">
+        {position.bot_id && (
+          <Button
+            size="small"
+            variant="contained"
+            color="error"
+            disabled={isSelling}
+            onClick={(e) => onSellClick(e, position)}
+            sx={{
+              minWidth: 56,
+              height: 28,
+              fontSize: '0.7rem',
+              fontWeight: 700,
+              textTransform: 'none',
+            }}
+          >
+            SELL
+          </Button>
+        )}
       </TableCell>
     </TableRow>
   )
@@ -299,8 +440,10 @@ const PositionRow: React.FC<{
 const PositionCard: React.FC<{
   position: Position
   onClick: () => void
-  getBotName: (botId: string) => string
-}> = ({ position, onClick, getBotName }) => {
+  getBotName: (botId: string | null) => string | null
+  onSellClick: (e: React.MouseEvent, position: Position) => void
+  isSelling: boolean
+}> = ({ position, onClick, getBotName, onSellClick, isSelling }) => {
   const pnlPercent =
     position.entry_price > 0
       ? ((position.current_price - position.entry_price) /
@@ -345,9 +488,19 @@ const PositionCard: React.FC<{
               />
             )}
           </Box>
-          <Typography variant="body2" color="text.secondary">
-            {getBotName(position.bot_id)}
-          </Typography>
+          {position.bot_id ? (
+            <Typography variant="body2" color="text.secondary">
+              {getBotName(position.bot_id)}
+            </Typography>
+          ) : (
+            <Chip
+              label="Unmanaged"
+              size="small"
+              color="warning"
+              variant="filled"
+              sx={{ height: 20, fontSize: '0.65rem', fontWeight: 600 }}
+            />
+          )}
         </Box>
         <PnLDisplay
           amount={position.unrealized_pnl}
@@ -407,13 +560,29 @@ const PositionCard: React.FC<{
         </Box>
       </Box>
 
-      <Typography
-        variant="body2"
-        color="text.secondary"
-        sx={{ mt: 1.5, textAlign: 'right' }}
-      >
-        Opened {formatRelativeTime(position.opened_at)}
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1.5 }}>
+        <Typography variant="body2" color="text.secondary">
+          {position.opened_at ? `Opened ${formatRelativeTime(position.opened_at)}` : ''}
+        </Typography>
+        {position.bot_id && (
+          <Button
+            size="small"
+            variant="contained"
+            color="error"
+            disabled={isSelling}
+            onClick={(e) => onSellClick(e, position)}
+            sx={{
+              minWidth: 56,
+              height: 28,
+              fontSize: '0.7rem',
+              fontWeight: 700,
+              textTransform: 'none',
+            }}
+          >
+            SELL
+          </Button>
+        )}
+      </Box>
     </Paper>
   )
 }

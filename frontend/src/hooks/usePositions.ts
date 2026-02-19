@@ -76,12 +76,27 @@ export const usePosition = (positionId: string | undefined) => {
 }
 
 /**
+ * Hook to fetch unmanaged Alpaca positions (not tracked by any bot)
+ */
+export const useUnmanagedPositions = () => {
+  return useQuery<Position[]>({
+    queryKey: ['positions', 'unmanaged'],
+    queryFn: async () => {
+      const response = await api.getUnmanagedPositions()
+      return response.data
+    },
+    staleTime: 1000 * 30,
+    refetchInterval: 1000 * 60,
+  })
+}
+
+/**
  * Hook to close a position
  */
 export const useClosePosition = () => {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (positionId: string) => {
+    mutationFn: async ({ positionId, pauseBot = true }: { positionId: string; pauseBot?: boolean }) => {
       if (USE_MOCK) {
         await new Promise((resolve) => setTimeout(resolve, 500))
         const position = mockPositions.find((p) => p.id === positionId)
@@ -93,12 +108,14 @@ export const useClosePosition = () => {
         }
         return { success: true }
       }
-      const response = await api.closePosition(positionId)
+      const response = await api.closePosition(positionId, pauseBot)
       return response.data
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['positions'] })
       queryClient.invalidateQueries({ queryKey: ['summaryStats'] })
+      queryClient.invalidateQueries({ queryKey: ['bots'] })
+      queryClient.invalidateQueries({ queryKey: ['account'] })
     },
   })
 }

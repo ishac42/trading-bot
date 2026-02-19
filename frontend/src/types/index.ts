@@ -18,6 +18,7 @@ export interface Bot {
   last_run_at?: string
   is_active: boolean
   error_count: number
+  realized_gains: number
 }
 
 export interface RiskManagement {
@@ -42,6 +43,8 @@ export interface Trade {
   status: 'pending' | 'filled' | 'cancelled' | 'failed'
   commission?: number
   slippage?: number
+  client_order_id?: string
+  reason?: string
 }
 
 export interface Position {
@@ -236,4 +239,19 @@ export interface AnalyticsData {
   pnlTimeSeries: AnalyticsPnLDataPoint[]
   botPerformance: BotPerformanceData[]
   symbolPerformance: SymbolPerformanceData[]
+}
+
+// =====================
+// Account Types (Sprint F)
+// =====================
+
+export interface AccountInfo {
+  account_number: string | null
+  equity: number
+  cash: number
+  buying_power: number
+  portfolio_value: number
+  allocated_capital: number
+  available_capital: number
+  total_realized_gains: number
 }

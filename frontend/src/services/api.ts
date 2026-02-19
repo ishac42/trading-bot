@@ -82,7 +82,8 @@ export const api = {
   // Positions
   getPositions: (params?: any) => apiClient.get('/positions', { params }),
   getPosition: (id: string) => apiClient.get(`/positions/${id}`),
-  closePosition: (id: string) => apiClient.post(`/positions/${id}/close`),
+  closePosition: (id: string, pauseBot: boolean = true) =>
+    apiClient.post(`/positions/${id}/close`, null, { params: { pause_bot: pauseBot } }),
 
   // Market Data
   getMarketStatus: () => apiClient.get('/market-status'),
@@ -90,4 +91,11 @@ export const api = {
 
   // Dashboard Summary
   getSummaryStats: () => apiClient.get('/summary'),
+
+  // Account
+  getAccount: () => apiClient.get('/account'),
+  reconcile: (limit?: number) => apiClient.get('/account/reconcile', { params: { limit: limit || 100 } }),
+
+  // Unmanaged positions
+  getUnmanagedPositions: () => apiClient.get('/positions/unmanaged'),
 }

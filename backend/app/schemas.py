@@ -100,6 +100,7 @@ class BotResponseSchema(BaseModel):
     last_run_at: str | None = None
     is_active: bool
     error_count: int
+    realized_gains: float = 0.0
 
 
 # =============================================================================
@@ -126,6 +127,8 @@ class TradeResponseSchema(BaseModel):
     status: Literal["pending", "filled", "cancelled", "failed"]
     commission: float | None = None
     slippage: float | None = None
+    client_order_id: str | None = None
+    reason: str | None = None
 
 
 class PaginationSchema(BaseModel):
