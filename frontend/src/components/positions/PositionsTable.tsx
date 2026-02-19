@@ -17,7 +17,7 @@ import {
 import type { Position } from '@/types'
 import { formatCurrency, formatRelativeTime } from '@/utils/formatters'
 import { PnLDisplay } from '@/components/common/PnLDisplay'
-import { getBotName } from '@/mocks/dashboardData'
+import { useBots } from '@/hooks/useBots'
 
 type SortField =
   | 'symbol'
@@ -52,6 +52,15 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
 }) => {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
+  const { data: bots } = useBots()
+
+  const botNameMap = React.useMemo(() => {
+    const map = new Map<string, string>()
+    bots?.forEach((bot) => map.set(bot.id, bot.name))
+    return map
+  }, [bots])
+
+  const getBotName = (botId: string) => botNameMap.get(botId) || 'Unknown Bot'
 
   const [sortField, setSortField] = useState<SortField>('opened_at')
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
@@ -92,6 +101,7 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
             key={position.id}
             position={position}
             onClick={() => onPositionClick(position)}
+            getBotName={getBotName}
           />
         ))}
       </Box>
@@ -172,6 +182,7 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
               key={position.id}
               position={position}
               onClick={() => onPositionClick(position)}
+              getBotName={getBotName}
             />
           ))}
         </TableBody>
@@ -204,7 +215,8 @@ const SortableHeader: React.FC<{
 const PositionRow: React.FC<{
   position: Position
   onClick: () => void
-}> = ({ position, onClick }) => {
+  getBotName: (botId: string) => string
+}> = ({ position, onClick, getBotName }) => {
   const pnlPercent =
     position.entry_price > 0
       ? ((position.current_price - position.entry_price) /
@@ -287,7 +299,8 @@ const PositionRow: React.FC<{
 const PositionCard: React.FC<{
   position: Position
   onClick: () => void
-}> = ({ position, onClick }) => {
+  getBotName: (botId: string) => string
+}> = ({ position, onClick, getBotName }) => {
   const pnlPercent =
     position.entry_price > 0
       ? ((position.current_price - position.entry_price) /

@@ -16,7 +16,7 @@ import type { Position } from '@/types'
 import { Modal } from '@/components/common/Modal'
 import { PnLDisplay } from '@/components/common/PnLDisplay'
 import { formatCurrency, formatRelativeTime } from '@/utils/formatters'
-import { getBotName } from '@/mocks/dashboardData'
+import { useBots } from '@/hooks/useBots'
 import { PositionChart } from './PositionChart'
 
 interface PositionDetailProps {
@@ -45,6 +45,12 @@ export const PositionDetail: React.FC<PositionDetailProps> = ({
   isClosing,
 }) => {
   const [showConfirmClose, setShowConfirmClose] = useState(false)
+  const { data: bots } = useBots()
+
+  const getBotName = (botId: string) => {
+    const bot = bots?.find((b) => b.id === botId)
+    return bot?.name || 'Unknown Bot'
+  }
 
   if (!position) return null
 
