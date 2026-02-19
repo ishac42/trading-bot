@@ -18,6 +18,23 @@ from pydantic import BaseModel, ConfigDict
 
 
 # =============================================================================
+# Error Response — consistent error shape for all endpoints
+# =============================================================================
+
+class ErrorDetailSchema(BaseModel):
+    """Inner error payload returned by all error responses."""
+    code: str
+    message: str
+    details: dict[str, Any] | None = None
+    request_id: str | None = None
+
+
+class ErrorResponseSchema(BaseModel):
+    """Top-level error wrapper."""
+    error: ErrorDetailSchema
+
+
+# =============================================================================
 # Risk Management — shared sub-schema
 # =============================================================================
 
@@ -83,6 +100,7 @@ class BotResponseSchema(BaseModel):
     last_run_at: str | None = None
     is_active: bool
     error_count: int
+    realized_gains: float = 0.0
 
 
 # =============================================================================
@@ -109,6 +127,8 @@ class TradeResponseSchema(BaseModel):
     status: Literal["pending", "filled", "cancelled", "failed"]
     commission: float | None = None
     slippage: float | None = None
+    client_order_id: str | None = None
+    reason: str | None = None
 
 
 class PaginationSchema(BaseModel):

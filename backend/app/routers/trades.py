@@ -9,11 +9,13 @@ Endpoints:
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+import structlog
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.exceptions import NotFoundError
 from app.models import Bot, Trade
 from app.schemas import (
     PaginationSchema,
@@ -24,6 +26,8 @@ from app.schemas import (
     TradeResponseSchema,
     TradeStatsSchema,
 )
+
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/trades", tags=["trades"])
 
@@ -44,6 +48,8 @@ def _trade_to_response(trade: Trade) -> dict:
         "status": trade.status,
         "commission": trade.commission,
         "slippage": trade.slippage,
+        "client_order_id": trade.client_order_id,
+        "reason": trade.reason,
     }
 
 
@@ -272,5 +278,5 @@ async def get_trade(trade_id: str, db: AsyncSession = Depends(get_db)):
     """Get a single trade by ID."""
     trade = await db.get(Trade, trade_id)
     if not trade:
-        raise HTTPException(status_code=404, detail="Trade not found")
+        raise NotFoundError("Trade", trade_id)
     return _trade_to_response(trade)

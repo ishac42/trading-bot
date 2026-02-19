@@ -1,14 +1,17 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/services/api'
-import type { Trade, TradeFilters, TradeStats } from '@/types'
-import { mockTrades, getBotName } from '@/mocks/dashboardData'
+import type { Bot, Trade, TradeFilters, TradeStats } from '@/types'
+import { mockTrades } from '@/mocks/dashboardData'
 
 const USE_MOCK = false // Backend is available
 
 /**
  * Compute trade statistics from a set of trades
  */
-function computeTradeStats(trades: Trade[]): TradeStats {
+function computeTradeStats(
+  trades: Trade[],
+  getBotName: (botId: string) => string
+): TradeStats {
   // Only look at trades that have P&L (closed trades)
   const closedTrades = trades.filter((t) => t.profit_loss !== undefined)
   const winningTrades = closedTrades.filter((t) => (t.profit_loss ?? 0) > 0)
@@ -179,13 +182,18 @@ function applyFilters(allTrades: Trade[], filters: TradeFilters): Trade[] {
  * Hook to fetch trade statistics with filters
  */
 export const useTradeStats = (filters: TradeFilters) => {
+  const queryClient = useQueryClient()
   return useQuery<TradeStats>({
     queryKey: ['tradeStats', filters],
     queryFn: async () => {
+      const cachedBots = queryClient.getQueryData<Bot[]>(['bots']) || []
+      const getBotName = (botId: string) =>
+        cachedBots.find((b) => b.id === botId)?.name || 'Unknown Bot'
+
       if (USE_MOCK) {
         await new Promise((resolve) => setTimeout(resolve, 200))
         const filtered = applyFilters(mockTrades, filters)
-        return computeTradeStats(filtered)
+        return computeTradeStats(filtered, getBotName)
       }
       const response = await api.getTradeStats({
         dateRange: filters.dateRange,

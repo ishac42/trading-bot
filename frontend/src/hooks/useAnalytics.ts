@@ -1,15 +1,16 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/services/api'
 import type {
   AnalyticsData,
   AnalyticsOverview,
   AnalyticsPnLDataPoint,
   AnalyticsTimeRange,
+  Bot,
   BotPerformanceData,
   SymbolPerformanceData,
   Trade,
 } from '@/types'
-import { mockTrades, mockBots, getBotName } from '@/mocks/dashboardData'
+import { mockTrades, mockBots } from '@/mocks/dashboardData'
 
 const USE_MOCK = false // Backend is available
 
@@ -18,7 +19,8 @@ const USE_MOCK = false // Backend is available
  */
 function computeAnalytics(
   trades: Trade[],
-  timeRange: AnalyticsTimeRange
+  timeRange: AnalyticsTimeRange,
+  bots: Bot[]
 ): AnalyticsData {
   // Filter trades by time range
   const filtered = filterByTimeRange(trades, timeRange)
@@ -109,7 +111,7 @@ function computeAnalytics(
   }
 
   // Total capital deployed
-  const totalCapitalDeployed = mockBots.reduce(
+  const totalCapitalDeployed = bots.reduce(
     (sum, bot) => sum + bot.capital,
     0
   )
@@ -141,7 +143,7 @@ function computeAnalytics(
   const pnlTimeSeries = computePnLTimeSeries(closedTrades)
 
   // Bot Performance
-  const botPerformance = computeBotPerformance(closedTrades, filtered)
+  const botPerformance = computeBotPerformance(closedTrades, filtered, bots)
 
   // Symbol Performance
   const symbolPerformance = computeSymbolPerformance(closedTrades, filtered)
@@ -224,7 +226,8 @@ function computePnLTimeSeries(
 
 function computeBotPerformance(
   closedTrades: Trade[],
-  allTrades: Trade[]
+  allTrades: Trade[],
+  bots: Bot[]
 ): BotPerformanceData[] {
   const botMap = new Map<
     string,
@@ -267,7 +270,7 @@ function computeBotPerformance(
   }
 
   return Array.from(botMap.entries()).map(([botId, data]) => {
-    const bot = mockBots.find((b) => b.id === botId)
+    const bot = bots.find((b) => b.id === botId)
     const totalWins = data.pnlValues
       .filter((v) => v > 0)
       .reduce((s, v) => s + v, 0)
@@ -278,7 +281,7 @@ function computeBotPerformance(
 
     return {
       botId,
-      botName: getBotName(botId),
+      botName: bot?.name || 'Unknown Bot',
       status: bot?.status ?? 'unknown',
       totalPnL: round(data.pnl),
       winRate:
@@ -380,17 +383,20 @@ function round(value: number, decimals: number = 2): number {
  * Hook to fetch comprehensive analytics data
  */
 export const useAnalytics = (timeRange: AnalyticsTimeRange = 'ALL') => {
+  const queryClient = useQueryClient()
   return useQuery<AnalyticsData>({
     queryKey: ['analytics', timeRange],
     queryFn: async () => {
+      const cachedBots = queryClient.getQueryData<Bot[]>(['bots']) || []
+
       if (USE_MOCK) {
         await new Promise((resolve) => setTimeout(resolve, 300))
-        return computeAnalytics(mockTrades, timeRange)
+        return computeAnalytics(mockTrades, timeRange, mockBots)
       }
       // Fetch all trades from backend and compute analytics client-side
       const response = await api.getTrades({ page: 1, pageSize: 99999 })
       const trades: Trade[] = response.data.trades
-      return computeAnalytics(trades, timeRange)
+      return computeAnalytics(trades, timeRange, cachedBots)
     },
     staleTime: 1000 * 30,
   })

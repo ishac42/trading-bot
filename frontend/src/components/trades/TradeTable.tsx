@@ -18,7 +18,7 @@ import {
 import { Card, PnLDisplay, EmptyState } from '@/components/common'
 import type { Trade, TradeSort, TradeSortField, TradePagination } from '@/types'
 import { formatCurrency } from '@/utils/formatters'
-import { getBotName } from '@/mocks/dashboardData'
+import { useBots } from '@/hooks/useBots'
 
 interface TradeTableProps {
   trades: Trade[]
@@ -32,7 +32,7 @@ interface TradeTableProps {
 }
 
 interface Column {
-  id: TradeSortField | 'bot'
+  id: TradeSortField | 'bot' | 'reason'
   label: string
   sortable: boolean
   align?: 'left' | 'right' | 'center'
@@ -47,6 +47,7 @@ const columns: Column[] = [
   { id: 'price', label: 'Price', sortable: true, align: 'right', minWidth: 90 },
   { id: 'bot', label: 'Bot', sortable: false, minWidth: 120 },
   { id: 'profit_loss', label: 'P&L', sortable: true, align: 'right', minWidth: 90 },
+  { id: 'reason', label: 'Reason', sortable: false, minWidth: 140 },
 ]
 
 /**
@@ -55,7 +56,8 @@ const columns: Column[] = [
 const TradeCardMobile: React.FC<{
   trade: Trade
   onClick: () => void
-}> = ({ trade, onClick }) => (
+  getBotName: (botId: string) => string
+}> = ({ trade, onClick, getBotName }) => (
   <Box
     onClick={onClick}
     sx={{
@@ -111,13 +113,24 @@ const TradeCardMobile: React.FC<{
         · Qty: {trade.quantity} · {formatCurrency(trade.price)}
       </Typography>
     </Box>
-    <Typography
-      variant="body2"
-      color="text.secondary"
-      sx={{ fontSize: '0.75rem', mt: 0.5 }}
-    >
-      {getBotName(trade.bot_id)}
-    </Typography>
+    <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+      <Typography
+        variant="body2"
+        color="text.secondary"
+        sx={{ fontSize: '0.75rem' }}
+      >
+        {getBotName(trade.bot_id)}
+      </Typography>
+      {trade.reason && (
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{ fontSize: '0.7rem', fontStyle: 'italic' }}
+        >
+          {trade.reason}
+        </Typography>
+      )}
+    </Box>
   </Box>
 )
 
@@ -150,6 +163,12 @@ export const TradeTable: React.FC<TradeTableProps> = ({
 }) => {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
+  const { data: bots } = useBots()
+
+  const getBotName = React.useCallback(
+    (botId: string) => bots?.find((b) => b.id === botId)?.name || 'Unknown Bot',
+    [bots]
+  )
 
   const handleSort = (field: TradeSortField) => {
     const isAsc = sort.field === field && sort.direction === 'asc'
@@ -190,6 +209,7 @@ export const TradeTable: React.FC<TradeTableProps> = ({
               key={trade.id}
               trade={trade}
               onClick={() => onRowClick(trade)}
+              getBotName={getBotName}
             />
           ))}
         </Box>
@@ -313,6 +333,15 @@ export const TradeTable: React.FC<TradeTableProps> = ({
                         -
                       </Typography>
                     )}
+                  </TableCell>
+                  <TableCell>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ fontSize: '0.75rem' }}
+                    >
+                      {trade.reason || '—'}
+                    </Typography>
                   </TableCell>
                 </TableRow>
               ))}

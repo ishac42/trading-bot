@@ -7,19 +7,20 @@ Endpoints:
   GET /api/summary             → dashboard summary statistics
 """
 
-import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+import structlog
+from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.alpaca_client import alpaca_client
 from app.database import get_db
+from app.exceptions import ExternalServiceError
 from app.models import Bot, Position, Trade
 from app.schemas import MarketStatusSchema, SummaryStatsSchema
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(tags=["market-data"])
 
@@ -108,11 +109,8 @@ async def get_market_data(symbol: str):
             "volume": 0,  # Volume not available in latest quote; use bars if needed
         }
     except Exception as e:
-        logger.error("Failed to fetch market data for %s: %s", symbol, e)
-        raise HTTPException(
-            status_code=502,
-            detail=f"Unable to retrieve market data for {symbol.upper()}",
-        )
+        logger.error("market_data_fetch_failed", symbol=symbol, error=str(e))
+        raise ExternalServiceError("Alpaca", f"Unable to retrieve market data for {symbol.upper()}")
 
 
 @router.get("/summary", response_model=SummaryStatsSchema)

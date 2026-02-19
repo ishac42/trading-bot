@@ -5,6 +5,8 @@ import {
   InputAdornment,
 } from '@mui/material'
 import { Input } from '@/components/common'
+import { useAccount } from '@/hooks/useAccount'
+import { formatCurrency } from '@/utils/formatters'
 
 interface BasicInfoSectionProps {
   name: string
@@ -24,6 +26,14 @@ export const BasicInfoSection: React.FC<BasicInfoSectionProps> = ({
   errors,
   onChange,
 }) => {
+  const { data: account } = useAccount()
+
+  const availableCapital = account?.available_capital ?? null
+  const capitalHelperText = errors.capital
+    || (availableCapital !== null
+      ? `Available: ${formatCurrency(availableCapital)} of ${formatCurrency(account?.buying_power ?? 0)} buying power`
+      : 'Total capital this bot can use for trading')
+
   return (
     <Box>
       <Typography variant="h3" sx={{ mb: 2, fontWeight: 600 }}>
@@ -48,7 +58,7 @@ export const BasicInfoSection: React.FC<BasicInfoSectionProps> = ({
           value={capital || ''}
           onChange={(e) => onChange('capital', parseFloat(e.target.value) || 0)}
           error={!!errors.capital}
-          helperText={errors.capital || 'Total capital this bot can use for trading'}
+          helperText={capitalHelperText}
           slotProps={{
             input: {
               startAdornment: <InputAdornment position="start">$</InputAdornment>,

@@ -130,6 +130,14 @@ class Trade(Base):
         Float, nullable=True, default=None
     )
 
+    # Sprint F: linking and traceability
+    client_order_id: Mapped[str | None] = mapped_column(
+        String(100), nullable=True, default=None
+    )
+    reason: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, default=None
+    )
+
     # Relationships
     bot: Mapped["Bot"] = relationship(back_populates="trades")
 
@@ -139,6 +147,7 @@ class Trade(Base):
         Index("ix_trades_symbol", "symbol"),
         Index("ix_trades_timestamp", "timestamp"),
         Index("ix_trades_status", "status"),
+        Index("ix_trades_client_order_id", "client_order_id"),
     )
 
     def __repr__(self) -> str:
