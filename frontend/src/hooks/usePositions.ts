@@ -91,6 +91,24 @@ export const useUnmanagedPositions = () => {
 }
 
 /**
+ * Hook to close an unmanaged Alpaca position (not tracked in our DB)
+ */
+export const useCloseUnmanagedPosition = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ symbol, quantity }: { symbol: string; quantity: number }) => {
+      const response = await api.closeUnmanagedPosition(symbol, quantity)
+      return response.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['positions'] })
+      queryClient.invalidateQueries({ queryKey: ['summaryStats'] })
+      queryClient.invalidateQueries({ queryKey: ['account'] })
+    },
+  })
+}
+
+/**
  * Hook to close a position
  */
 export const useClosePosition = () => {

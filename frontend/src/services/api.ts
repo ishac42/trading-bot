@@ -84,6 +84,8 @@ export const api = {
   getPosition: (id: string) => apiClient.get(`/positions/${id}`),
   closePosition: (id: string, pauseBot: boolean = true) =>
     apiClient.post(`/positions/${id}/close`, null, { params: { pause_bot: pauseBot } }),
+  closeUnmanagedPosition: (symbol: string, quantity: number) =>
+    apiClient.post('/positions/close-unmanaged', null, { params: { symbol, quantity } }),
 
   // Market Data
   getMarketStatus: () => apiClient.get('/market-status'),

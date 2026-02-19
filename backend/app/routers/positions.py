@@ -139,6 +139,49 @@ async def get_unmanaged_positions(db: AsyncSession = Depends(get_db)):
     return unmanaged
 
 
+@router.post("/close-unmanaged")
+async def close_unmanaged_position(
+    symbol: str = Query(...),
+    quantity: int = Query(..., ge=1),
+):
+    """
+    Close an unmanaged Alpaca position (not tracked in our DB).
+    Sells the given quantity of the symbol at market price directly via Alpaca.
+    """
+    if not alpaca_client:
+        raise ExternalServiceError("Alpaca", "Alpaca client not configured")
+
+    try:
+        import asyncio
+        order_result = await alpaca_client.submit_market_order(
+            symbol=symbol,
+            qty=quantity,
+            side="sell",
+            time_in_force="day",
+        )
+        order_id = order_result["id"]
+        logger.info(
+            "Submitted unmanaged close sell order for %s x%d → order_id=%s",
+            symbol, quantity, order_id[:8],
+        )
+
+        await asyncio.sleep(1)
+        order_status = await alpaca_client.get_order(order_id)
+        fill_price = order_status.get("filled_avg_price")
+
+        return {
+            "success": True,
+            "order_id": order_id,
+            "symbol": symbol,
+            "quantity": quantity,
+            "fill_price": fill_price,
+            "status": order_status.get("status"),
+        }
+    except Exception as e:
+        logger.error("Failed to close unmanaged position %s x%d: %s", symbol, quantity, e)
+        raise ExternalServiceError("Alpaca", f"Failed to sell unmanaged position: {e}")
+
+
 @router.get("/{position_id}", response_model=PositionResponseSchema)
 async def get_position(position_id: str, db: AsyncSession = Depends(get_db)):
     """Get a single position by ID."""

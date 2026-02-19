@@ -26,7 +26,7 @@ import type { Position } from '@/types'
 import { formatCurrency, formatRelativeTime } from '@/utils/formatters'
 import { PnLDisplay } from '@/components/common/PnLDisplay'
 import { useBots } from '@/hooks/useBots'
-import { useClosePosition } from '@/hooks/usePositions'
+import { useClosePosition, useCloseUnmanagedPosition } from '@/hooks/usePositions'
 
 type SortField =
   | 'symbol'
@@ -77,12 +77,15 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
   const isUnmanaged = (position: Position) => !position.bot_id
 
   const closePosition = useClosePosition()
+  const closeUnmanaged = useCloseUnmanagedPosition()
   const [sellTarget, setSellTarget] = useState<Position | null>(null)
   const [snackbar, setSnackbar] = useState<{
     open: boolean
     message: string
     severity: 'success' | 'error'
   }>({ open: false, message: '', severity: 'success' })
+
+  const isSelling = closePosition.isPending || closeUnmanaged.isPending
 
   const handleSellClick = (e: React.MouseEvent, position: Position) => {
     e.stopPropagation()
@@ -91,23 +94,43 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
 
   const handleConfirmSell = () => {
     if (!sellTarget) return
-    const botLabel = getBotName(sellTarget.bot_id)
-    closePosition.mutate(
-      { positionId: sellTarget.id, pauseBot: true },
-      {
-        onSuccess: (data: any) => {
-          const msg = data.bot_paused
-            ? `Position closed. Bot '${data.bot_name}' has been paused.`
-            : 'Position closed successfully.'
-          setSnackbar({ open: true, message: msg, severity: 'success' })
-          setSellTarget(null)
-        },
-        onError: () => {
-          setSnackbar({ open: true, message: 'Failed to close position.', severity: 'error' })
-          setSellTarget(null)
-        },
-      }
-    )
+
+    if (isUnmanaged(sellTarget)) {
+      closeUnmanaged.mutate(
+        { symbol: sellTarget.symbol, quantity: sellTarget.quantity },
+        {
+          onSuccess: () => {
+            setSnackbar({
+              open: true,
+              message: `Sold ${sellTarget.quantity} shares of ${sellTarget.symbol}.`,
+              severity: 'success',
+            })
+            setSellTarget(null)
+          },
+          onError: () => {
+            setSnackbar({ open: true, message: 'Failed to close unmanaged position.', severity: 'error' })
+            setSellTarget(null)
+          },
+        }
+      )
+    } else {
+      closePosition.mutate(
+        { positionId: sellTarget.id, pauseBot: true },
+        {
+          onSuccess: (data: any) => {
+            const msg = data.bot_paused
+              ? `Position closed. Bot '${data.bot_name}' has been paused.`
+              : 'Position closed successfully.'
+            setSnackbar({ open: true, message: msg, severity: 'success' })
+            setSellTarget(null)
+          },
+          onError: () => {
+            setSnackbar({ open: true, message: 'Failed to close position.', severity: 'error' })
+            setSellTarget(null)
+          },
+        }
+      )
+    }
   }
 
   const [sortField, setSortField] = useState<SortField>('opened_at')
@@ -141,6 +164,8 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
     return ((aVal as number) - (bVal as number)) * multiplier
   })
 
+  const sellIsUnmanaged = sellTarget ? isUnmanaged(sellTarget) : false
+
   const confirmDialog = (
     <>
       <Dialog
@@ -165,9 +190,9 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
             onClick={handleConfirmSell}
             variant="contained"
             color="error"
-            disabled={closePosition.isPending}
+            disabled={isSelling}
           >
-            Sell &amp; Pause Bot
+            {sellIsUnmanaged ? 'Sell' : 'Sell & Pause Bot'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -200,7 +225,7 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
               onClick={() => onPositionClick(position)}
               getBotName={getBotName}
               onSellClick={handleSellClick}
-              isSelling={closePosition.isPending && sellTarget?.id === position.id}
+              isSelling={isSelling && sellTarget?.id === position.id}
             />
           ))}
         </Box>
@@ -289,7 +314,7 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
               onClick={() => onPositionClick(position)}
               getBotName={getBotName}
               onSellClick={handleSellClick}
-              isSelling={closePosition.isPending && sellTarget?.id === position.id}
+              isSelling={isSelling && sellTarget?.id === position.id}
             />
           ))}
         </TableBody>
@@ -413,24 +438,22 @@ const PositionRow: React.FC<{
         </Typography>
       </TableCell>
       <TableCell align="center">
-        {position.bot_id && (
-          <Button
-            size="small"
-            variant="contained"
-            color="error"
-            disabled={isSelling}
-            onClick={(e) => onSellClick(e, position)}
-            sx={{
-              minWidth: 56,
-              height: 28,
-              fontSize: '0.7rem',
-              fontWeight: 700,
-              textTransform: 'none',
-            }}
-          >
-            SELL
-          </Button>
-        )}
+        <Button
+          size="small"
+          variant="contained"
+          color="error"
+          disabled={isSelling}
+          onClick={(e) => onSellClick(e, position)}
+          sx={{
+            minWidth: 56,
+            height: 28,
+            fontSize: '0.7rem',
+            fontWeight: 700,
+            textTransform: 'none',
+          }}
+        >
+          SELL
+        </Button>
       </TableCell>
     </TableRow>
   )
@@ -564,24 +587,22 @@ const PositionCard: React.FC<{
         <Typography variant="body2" color="text.secondary">
           {position.opened_at ? `Opened ${formatRelativeTime(position.opened_at)}` : ''}
         </Typography>
-        {position.bot_id && (
-          <Button
-            size="small"
-            variant="contained"
-            color="error"
-            disabled={isSelling}
-            onClick={(e) => onSellClick(e, position)}
-            sx={{
-              minWidth: 56,
-              height: 28,
-              fontSize: '0.7rem',
-              fontWeight: 700,
-              textTransform: 'none',
-            }}
-          >
-            SELL
-          </Button>
-        )}
+        <Button
+          size="small"
+          variant="contained"
+          color="error"
+          disabled={isSelling}
+          onClick={(e) => onSellClick(e, position)}
+          sx={{
+            minWidth: 56,
+            height: 28,
+            fontSize: '0.7rem',
+            fontWeight: 700,
+            textTransform: 'none',
+          }}
+        >
+          SELL
+        </Button>
       </Box>
     </Paper>
   )
