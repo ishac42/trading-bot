@@ -70,10 +70,6 @@ export const BotCard: React.FC<BotCardProps> = ({
     onClick?.(bot.id)
   }, [bot.id, onClick])
 
-  // Mock metrics (will come from API in production)
-  const tradesToday = Math.floor(Math.random() * 10) + 1
-  const winRate = Math.floor(Math.random() * 40) + 40
-
   const actionButtons = (
     <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
       {bot.status === 'running' && (
@@ -234,7 +230,7 @@ export const BotCard: React.FC<BotCardProps> = ({
             P&L:
           </Typography>
           <PnLDisplay
-            amount={bot.status === 'running' ? 234.56 : bot.status === 'paused' ? -45.23 : 1234.56}
+            amount={bot.today_pnl}
             showSign
             size="small"
             bold
@@ -263,7 +259,7 @@ export const BotCard: React.FC<BotCardProps> = ({
         <Typography variant="body2" color="text.secondary">
           Trades Today:{' '}
           <Box component="span" sx={{ fontWeight: 600, color: 'text.primary' }}>
-            {tradesToday}
+            {bot.trades_today}
           </Box>
         </Typography>
 
@@ -275,10 +271,10 @@ export const BotCard: React.FC<BotCardProps> = ({
             component="span"
             sx={{
               fontWeight: 600,
-              color: winRate >= 50 ? 'success.main' : 'error.main',
+              color: bot.win_rate >= 50 ? 'success.main' : 'error.main',
             }}
           >
-            {winRate}%
+            {bot.win_rate}%
           </Box>
         </Typography>
       </Box>

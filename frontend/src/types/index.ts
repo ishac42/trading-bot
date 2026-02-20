@@ -19,6 +19,9 @@ export interface Bot {
   is_active: boolean
   error_count: number
   realized_gains: number
+  trades_today: number
+  win_rate: number
+  today_pnl: number
 }
 
 export interface RiskManagement {

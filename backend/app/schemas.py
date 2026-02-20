@@ -101,6 +101,9 @@ class BotResponseSchema(BaseModel):
     is_active: bool
     error_count: int
     realized_gains: float = 0.0
+    trades_today: int = 0
+    win_rate: float = 0.0
+    today_pnl: float = 0.0
 
 
 # =============================================================================

@@ -12,14 +12,16 @@ Endpoints:
   POST   /api/bots/{id}/pause → pause a bot
 """
 
+from datetime import datetime, timezone
+
 import structlog
 from fastapi import APIRouter, Depends
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.exceptions import NotFoundError, ConflictError, BadRequestError
-from app.models import Bot, Position
+from app.models import Bot, Position, Trade
 from app.schemas import BotCreateSchema, BotResponseSchema, BotUpdateSchema
 from app.models import utcnow, generate_uuid
 from app.websocket_manager import ws_manager
@@ -60,7 +62,13 @@ async def _validate_capital(
         logger.warning("Could not validate capital against Alpaca: %s", e)
 
 
-def _bot_to_response(bot: Bot, realized_gains: float = 0.0) -> dict:
+def _bot_to_response(
+    bot: Bot,
+    realized_gains: float = 0.0,
+    trades_today: int = 0,
+    win_rate: float = 0.0,
+    today_pnl: float = 0.0,
+) -> dict:
     """Convert a Bot ORM model to the response dict with ISO timestamps."""
     return {
         "id": bot.id,
@@ -81,12 +89,70 @@ def _bot_to_response(bot: Bot, realized_gains: float = 0.0) -> dict:
         "is_active": bot.is_active,
         "error_count": bot.error_count,
         "realized_gains": round(realized_gains, 2),
+        "trades_today": trades_today,
+        "win_rate": round(win_rate, 1),
+        "today_pnl": round(today_pnl, 2),
+    }
+
+
+async def _get_bot_metrics(db: AsyncSession, bot_ids: list[str] | None = None):
+    """
+    Batch-compute per-bot trading metrics: trades_today, win_rate, today_pnl.
+    If bot_ids is None, computes for all bots that have trades.
+    Returns a dict mapping bot_id -> {trades_today, win_rate, today_pnl}.
+    """
+    now = datetime.now(timezone.utc)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    bot_filter = Trade.bot_id.in_(bot_ids) if bot_ids else True
+
+    # Trades today per bot
+    trades_today_result = await db.execute(
+        select(Trade.bot_id, func.count(Trade.id))
+        .where(bot_filter, Trade.timestamp >= today_start)
+        .group_by(Trade.bot_id)
+    )
+    trades_today_map = {row[0]: row[1] for row in trades_today_result}
+
+    # Today's P&L per bot (sum of profit_loss for today's closed trades)
+    today_pnl_result = await db.execute(
+        select(Trade.bot_id, func.coalesce(func.sum(Trade.profit_loss), 0.0))
+        .where(bot_filter, Trade.timestamp >= today_start, Trade.profit_loss.isnot(None))
+        .group_by(Trade.bot_id)
+    )
+    today_pnl_map = {row[0]: float(row[1]) for row in today_pnl_result}
+
+    # Win rate per bot (all-time, based on closed trades with profit_loss)
+    win_rate_result = await db.execute(
+        select(
+            Trade.bot_id,
+            func.count(Trade.id),
+            func.sum(case((Trade.profit_loss > 0, 1), else_=0)),
+        )
+        .where(bot_filter, Trade.profit_loss.isnot(None))
+        .group_by(Trade.bot_id)
+    )
+    win_rate_map = {}
+    for row in win_rate_result:
+        total = row[1]
+        wins = row[2] or 0
+        win_rate_map[row[0]] = (wins / total * 100) if total > 0 else 0.0
+
+    # Merge into a single dict
+    all_bot_ids = set(trades_today_map) | set(today_pnl_map) | set(win_rate_map)
+    return {
+        bid: {
+            "trades_today": trades_today_map.get(bid, 0),
+            "win_rate": win_rate_map.get(bid, 0.0),
+            "today_pnl": today_pnl_map.get(bid, 0.0),
+        }
+        for bid in all_bot_ids
     }
 
 
 @router.get("", response_model=list[BotResponseSchema])
 async def get_bots(db: AsyncSession = Depends(get_db)):
-    """List all bots, ordered by created_at descending, with realized gains."""
+    """List all bots, ordered by created_at descending, with realized gains and live metrics."""
     result = await db.execute(
         select(Bot).order_by(Bot.created_at.desc())
     )
@@ -100,7 +166,17 @@ async def get_bots(db: AsyncSession = Depends(get_db)):
     )
     gains_map = {row[0]: float(row[1]) for row in gains_result}
 
-    return [_bot_to_response(bot, gains_map.get(bot.id, 0.0)) for bot in bots]
+    # Batch-fetch live trading metrics (trades_today, win_rate, today_pnl)
+    metrics_map = await _get_bot_metrics(db)
+
+    return [
+        _bot_to_response(
+            bot,
+            realized_gains=gains_map.get(bot.id, 0.0),
+            **metrics_map.get(bot.id, {}),
+        )
+        for bot in bots
+    ]
 
 
 @router.post("", response_model=BotResponseSchema, status_code=201)
@@ -132,13 +208,18 @@ async def create_bot(data: BotCreateSchema, db: AsyncSession = Depends(get_db)):
 
 @router.get("/{bot_id}", response_model=BotResponseSchema)
 async def get_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
-    """Get a single bot by ID with realized gains."""
+    """Get a single bot by ID with realized gains and live metrics."""
     bot = await db.get(Bot, bot_id)
     if not bot:
         raise NotFoundError("Bot", bot_id)
     from app.routers.account import get_bot_realized_gains
     gains = await get_bot_realized_gains(db, bot_id)
-    return _bot_to_response(bot, gains)
+    metrics_map = await _get_bot_metrics(db, bot_ids=[bot_id])
+    return _bot_to_response(
+        bot,
+        realized_gains=gains,
+        **metrics_map.get(bot_id, {}),
+    )
 
 
 @router.put("/{bot_id}", response_model=BotResponseSchema)
