@@ -22,6 +22,10 @@ pandas>=2.2.0
 numpy>=1.26.0
 # pandas-ta>=0.3.14b  # Deferred — requires numba which doesn't support Python 3.14 yet (Sprint C)
 
+# Authentication
+python-jose[cryptography]>=3.3.0
+google-auth>=2.29.0
+
 # Utilities
 python-dotenv>=1.0.1
 httpx>=0.28.0

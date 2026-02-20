@@ -35,8 +35,10 @@ apiClient.interceptors.response.use(
     if (error.response) {
       switch (error.response.status) {
         case 401:
-          // Unauthorized - clear token and redirect to login
           localStorage.removeItem('auth_token')
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login'
+          }
           break
         case 403:
           console.error('Forbidden: You do not have permission to access this resource')
@@ -61,6 +63,10 @@ export default apiClient
 
 // API endpoints (will be expanded as we build features)
 export const api = {
+  // Auth
+  googleLogin: (credential: string) => apiClient.post('/auth/google', { credential }),
+  getMe: () => apiClient.get('/auth/me'),
+
   // Health check
   health: () => apiClient.get('/health'),
 
@@ -100,4 +106,16 @@ export const api = {
 
   // Unmanaged positions
   getUnmanagedPositions: () => apiClient.get('/positions/unmanaged'),
+
+  // Settings
+  getSettings: () => apiClient.get('/settings'),
+  updateBrokerSettings: (data: any) => apiClient.put('/settings/broker', data),
+  updateNotificationSettings: (data: any) => apiClient.put('/settings/notifications', data),
+  updateDisplaySettings: (data: any) => apiClient.put('/settings/display', data),
+  testBrokerConnection: () => apiClient.post('/settings/broker/test'),
+  exportTradesCsv: () => apiClient.post('/settings/export/trades', null, { responseType: 'blob' }),
+  exportPositionsCsv: () => apiClient.post('/settings/export/positions', null, { responseType: 'blob' }),
+  clearTradeHistory: () => apiClient.delete('/settings/trades'),
+  resetAllSettings: () => apiClient.post('/settings/reset'),
+  getDataStats: () => apiClient.get('/settings/data-stats'),
 }

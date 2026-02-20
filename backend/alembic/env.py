@@ -15,7 +15,7 @@ from alembic import context
 # Import our app config and models so Alembic can see the metadata
 from app.config import settings
 from app.database import Base
-from app.models import Bot, Trade, Position  # noqa: F401 — ensure models are registered
+from app.models import User, AppSettings, Bot, Trade, Position  # noqa: F401 — ensure models are registered
 
 # Alembic Config object
 config = context.config

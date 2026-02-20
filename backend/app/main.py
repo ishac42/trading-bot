@@ -21,7 +21,7 @@ from app.config import settings
 from app.database import engine
 from app.logging_config import configure_logging
 from app.middleware import register_middleware_and_handlers
-from app.routers import account, bots, trades, positions, market_data
+from app.routers import account, auth, bots, trades, positions, market_data, settings
 from app.websocket_manager import socket_app
 from app.alpaca_client import alpaca_client
 from app.trading_engine import trading_engine
@@ -79,11 +79,13 @@ app.add_middleware(
 )
 
 # Register routers under /api prefix
+app.include_router(auth.router, prefix="/api")
 app.include_router(account.router, prefix="/api")
 app.include_router(bots.router, prefix="/api")
 app.include_router(trades.router, prefix="/api")
 app.include_router(positions.router, prefix="/api")
 app.include_router(market_data.router, prefix="/api")
+app.include_router(settings.router, prefix="/api")
 
 # Mount Socket.IO at /ws — frontend connects via socket.io-client to ws://host:8000/ws
 app.mount("/ws", socket_app)

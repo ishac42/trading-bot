@@ -1,5 +1,27 @@
 // Common types for the application
 
+// =====================
+// Auth Types
+// =====================
+
+export interface User {
+  id: string
+  email: string
+  name: string
+  avatar_url: string | null
+  provider: string
+  created_at: string
+}
+
+export interface AuthResponse {
+  token: string
+  user: User
+}
+
+// =====================
+// Bot Types
+// =====================
+
 export interface Bot {
   id: string
   name: string
@@ -260,4 +282,63 @@ export interface AccountInfo {
   allocated_capital: number
   available_capital: number
   total_realized_gains: number
+}
+
+// =====================
+// Settings Types
+// =====================
+
+export interface BrokerSettings {
+  alpaca_api_key: string
+  alpaca_secret_key: string
+  base_url: string
+  is_paper: boolean
+}
+
+export interface BrokerSettingsResponse {
+  alpaca_api_key_masked: string
+  alpaca_secret_key_masked: string
+  base_url: string
+  is_paper: boolean
+  is_connected: boolean
+  last_verified: string | null
+}
+
+export interface NotificationSettings {
+  email_enabled: boolean
+  email_address: string
+  notify_trade_executed: boolean
+  notify_bot_error: boolean
+  notify_daily_summary: boolean
+  notify_stop_loss_hit: boolean
+  notify_market_hours: boolean
+}
+
+export interface DisplaySettings {
+  timezone: string
+  currency: string
+  decimal_places: number
+  date_format: string
+  refresh_interval: number
+}
+
+export interface AllSettings {
+  broker: BrokerSettingsResponse
+  notifications: NotificationSettings
+  display: DisplaySettings
+}
+
+export interface BrokerTestResult {
+  success: boolean
+  message: string
+  account_id?: string
+  equity?: number
+  buying_power?: number
+}
+
+export interface DataStats {
+  total_bots: number
+  total_trades: number
+  total_positions: number
+  open_positions: number
 }
