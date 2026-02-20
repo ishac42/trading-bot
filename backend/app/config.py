@@ -5,7 +5,6 @@ Uses pydantic-settings for type-safe configuration management.
 
 import json
 
-from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -45,21 +44,16 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRY_HOURS: int = 24
 
-    # CORS
-    CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:5175", "http://localhost:3000"]
+    # CORS — stored as str so pydantic-settings doesn't try to JSON-parse it
+    CORS_ORIGINS: str = '["http://localhost:5173","http://localhost:5175","http://localhost:3000"]'
 
-    @field_validator("CORS_ORIGINS", mode="before")
-    @classmethod
-    def parse_cors_origins(cls, v: object) -> list[str]:
-        """Accept JSON array string, comma-separated string, or list."""
-        if isinstance(v, list):
-            return v
-        if isinstance(v, str):
-            v = v.strip()
-            if v.startswith("["):
-                return json.loads(v)
-            return [origin.strip() for origin in v.split(",") if origin.strip()]
-        return v
+    @property
+    def cors_origins_list(self) -> list[str]:
+        """Parse CORS_ORIGINS into a list. Accepts JSON array or comma-separated string."""
+        raw = self.CORS_ORIGINS.strip()
+        if raw.startswith("["):
+            return json.loads(raw)
+        return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
     # WebSocket
     WS_PING_INTERVAL: int = 25

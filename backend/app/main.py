@@ -107,7 +107,7 @@ register_middleware_and_handlers(app)
 # CORS — allow frontend dev servers
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=app_config.CORS_ORIGINS,
+    allow_origins=app_config.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

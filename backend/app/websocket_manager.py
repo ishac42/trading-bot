@@ -18,7 +18,7 @@ from app.config import settings
 # Create async Socket.IO server
 sio = socketio.AsyncServer(
     async_mode="asgi",
-    cors_allowed_origins=settings.CORS_ORIGINS,
+    cors_allowed_origins=settings.cors_origins_list,
     ping_interval=settings.WS_PING_INTERVAL,
     ping_timeout=settings.WS_PING_TIMEOUT,
     logger=settings.DEBUG,
