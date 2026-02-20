@@ -316,10 +316,25 @@ class BotRunner:
 
             # Wait for fill with retries
             order_status = await self._wait_for_fill(order_result["id"])
-
-            filled_price = order_status.get("filled_avg_price") or current_price
-            filled_qty = int(order_status.get("filled_qty", 0)) or qty
             status = order_status.get("status", "pending")
+
+            if status in ("canceled", "cancelled", "expired", "rejected"):
+                logger.warning(
+                    "BUY order for %s was %s, skipping position creation",
+                    symbol, status,
+                )
+                return
+
+            filled_price = order_status.get("filled_avg_price")
+            filled_qty = int(order_status.get("filled_qty", 0)) or qty
+
+            if not filled_price:
+                logger.error(
+                    "BUY order %s has no filled_avg_price (status=%s). "
+                    "Skipping position creation to avoid corrupted entry price.",
+                    order_result["id"][:8], status,
+                )
+                return
 
             # Calculate stop-loss and take-profit
             stop_loss = risk_manager.calculate_stop_loss(filled_price, risk_config)
@@ -436,8 +451,24 @@ class BotRunner:
                 )
 
                 order_status = await self._wait_for_fill(order_result["id"])
+                sell_status = order_status.get("status", "pending")
 
-                filled_price = order_status.get("filled_avg_price") or current_price
+                if sell_status in ("canceled", "cancelled", "expired", "rejected"):
+                    logger.warning(
+                        "SELL order for %s was %s, position remains open",
+                        symbol, sell_status,
+                    )
+                    return
+
+                filled_price = order_status.get("filled_avg_price")
+                if not filled_price:
+                    logger.error(
+                        "SELL order %s has no filled_avg_price (status=%s). "
+                        "Using current_price=%s as fallback for P&L calc.",
+                        order_result["id"][:8], sell_status, current_price,
+                    )
+                    filled_price = current_price
+
                 profit_loss = round((filled_price - position.entry_price) * position.quantity, 2)
 
                 # Update position
@@ -610,15 +641,22 @@ class BotRunner:
 
         return start_minutes <= current_minutes <= end_minutes
 
-    async def _wait_for_fill(self, order_id: str, max_attempts: int = 3) -> dict[str, Any]:
+    async def _wait_for_fill(self, order_id: str, max_attempts: int = 10) -> dict[str, Any]:
         """
         Wait for an order to fill, retrying up to max_attempts times.
         Returns the order status dict.
         """
+        order_status: dict[str, Any] = {}
         for attempt in range(max_attempts):
             await asyncio.sleep(1)
             order_status = await alpaca_client.get_order(order_id)
             if order_status.get("status") == "filled":
+                return order_status
+            if order_status.get("status") in ("canceled", "cancelled", "expired", "rejected"):
+                logger.warning(
+                    "Order %s terminal status: %s",
+                    order_id[:8], order_status.get("status"),
+                )
                 return order_status
             logger.debug(
                 "Order %s not yet filled (attempt %d/%d, status=%s)",

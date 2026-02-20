@@ -112,7 +112,7 @@ class TestMACD:
 
     def test_macd_returns_correct_keys(self, trending_up_bars, macd_config):
         results = indicator_calculator.calculate(trending_up_bars, macd_config)
-        assert_keys(results["MACD"], {"macd", "signal", "histogram", "fast", "slow", "signal_period"})
+        assert_keys(results["MACD"], {"macd", "signal", "histogram", "prev_histogram", "fast", "slow", "signal_period"})
 
     def test_macd_positive_histogram_on_uptrend(self, trending_up_bars, macd_config):
         """In an uptrend, the MACD histogram should be positive."""

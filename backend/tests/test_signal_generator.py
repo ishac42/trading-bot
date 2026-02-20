@@ -60,23 +60,43 @@ class TestEvalRSI:
 
 
 class TestEvalMACD:
-    """Tests for MACD signal evaluation."""
+    """Tests for MACD crossover signal evaluation."""
 
-    def test_buy_on_positive_histogram(self):
-        values = {"macd": 1.5, "signal": 1.0, "histogram": 0.5}
+    def test_buy_on_bullish_crossover(self):
+        values = {"macd": 1.5, "signal": 1.0, "histogram": 0.5, "prev_histogram": -0.1}
         assert signal_generator._eval_macd(values, {}) == Signal.BUY
 
-    def test_sell_on_negative_histogram(self):
-        values = {"macd": 1.0, "signal": 1.5, "histogram": -0.5}
+    def test_hold_when_histogram_stays_positive(self):
+        values = {"macd": 1.5, "signal": 1.0, "histogram": 0.5, "prev_histogram": 0.3}
+        assert signal_generator._eval_macd(values, {}) == Signal.HOLD
+
+    def test_sell_on_bearish_crossover(self):
+        values = {"macd": 1.0, "signal": 1.5, "histogram": -0.5, "prev_histogram": 0.1}
         assert signal_generator._eval_macd(values, {}) == Signal.SELL
 
+    def test_hold_when_histogram_stays_negative(self):
+        values = {"macd": 1.0, "signal": 1.5, "histogram": -0.5, "prev_histogram": -0.3}
+        assert signal_generator._eval_macd(values, {}) == Signal.HOLD
+
     def test_hold_on_near_zero_histogram(self):
-        values = {"macd": 1.0, "signal": 1.0, "histogram": 0.005}
+        values = {"macd": 1.0, "signal": 1.0, "histogram": 0.005, "prev_histogram": -0.1}
         assert signal_generator._eval_macd(values, {}) == Signal.HOLD
 
     def test_hold_when_histogram_is_none(self):
-        values = {"histogram": None}
+        values = {"histogram": None, "prev_histogram": -0.1}
         assert signal_generator._eval_macd(values, {}) == Signal.HOLD
+
+    def test_hold_when_prev_histogram_is_none(self):
+        values = {"histogram": 0.5, "prev_histogram": None}
+        assert signal_generator._eval_macd(values, {}) == Signal.HOLD
+
+    def test_buy_crossover_from_exactly_zero(self):
+        values = {"macd": 1.5, "signal": 1.0, "histogram": 0.5, "prev_histogram": 0.0}
+        assert signal_generator._eval_macd(values, {}) == Signal.BUY
+
+    def test_sell_crossover_from_exactly_zero(self):
+        values = {"macd": 1.0, "signal": 1.5, "histogram": -0.5, "prev_histogram": 0.0}
+        assert signal_generator._eval_macd(values, {}) == Signal.SELL
 
 
 class TestEvalSMA:
@@ -360,7 +380,7 @@ class TestEvaluatePerIndicator:
     def test_returns_signal_for_each_indicator(self):
         indicators = {
             "RSI": {"value": 25},
-            "MACD": {"macd": 1.5, "signal": 1.0, "histogram": 0.5},
+            "MACD": {"macd": 1.5, "signal": 1.0, "histogram": 0.5, "prev_histogram": -0.1},
         }
         config = {
             "RSI": {"oversold": 30, "overbought": 70},
@@ -371,7 +391,7 @@ class TestEvaluatePerIndicator:
         assert results["MACD"] == Signal.BUY
 
     def test_skips_none_indicators(self):
-        indicators = {"RSI": None, "MACD": {"histogram": 0.5}}
+        indicators = {"RSI": None, "MACD": {"histogram": 0.5, "prev_histogram": -0.1}}
         config = {"RSI": {}, "MACD": {}}
         results = signal_generator.evaluate_per_indicator(indicators, config)
         assert "RSI" not in results
