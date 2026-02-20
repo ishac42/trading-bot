@@ -127,7 +127,12 @@ class TradeResponseSchema(BaseModel):
     indicators_snapshot: dict[str, Any] | None = None
     profit_loss: float | None = None
     order_id: str | None = None
-    status: Literal["pending", "filled", "cancelled", "failed"]
+    status: Literal[
+        "pending", "filled", "cancelled", "failed",
+        "accepted", "partially_filled", "pending_new",
+        "new", "done_for_day", "expired", "replaced",
+        "stopped", "rejected", "suspended", "calculated",
+    ]
     commission: float | None = None
     slippage: float | None = None
     client_order_id: str | None = None

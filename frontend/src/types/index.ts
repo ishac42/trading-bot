@@ -44,6 +44,9 @@ export interface Trade {
   profit_loss?: number
   order_id?: string
   status: 'pending' | 'filled' | 'cancelled' | 'failed'
+    | 'accepted' | 'partially_filled' | 'pending_new'
+    | 'new' | 'done_for_day' | 'expired' | 'replaced'
+    | 'stopped' | 'rejected' | 'suspended' | 'calculated'
   commission?: number
   slippage?: number
   client_order_id?: string

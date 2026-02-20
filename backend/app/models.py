@@ -122,7 +122,7 @@ class Trade(Base):
     )
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="pending"
-    )  # 'pending' | 'filled' | 'cancelled' | 'failed'
+    )  # Alpaca order statuses: pending, filled, cancelled, failed, accepted, partially_filled, pending_new, etc.
     commission: Mapped[float | None] = mapped_column(
         Float, nullable=True, default=None
     )
