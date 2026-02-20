@@ -27,11 +27,14 @@ export const MarketStatusIndicator: React.FC<MarketStatusIndicatorProps> = ({
   sx,
   className,
 }) => {
-  const isOpen = marketStatus?.is_open ?? false
-  const color = isOpen ? '#4caf50' : '#757575'
-  const label = isOpen ? 'Market OPEN' : 'Market CLOSED'
+  const hasError = !!marketStatus?.error
+  const isOpen = !hasError && (marketStatus?.is_open ?? false)
+  const color = hasError ? '#f44336' : isOpen ? '#4caf50' : '#757575'
+  const label = hasError ? 'Market UNKNOWN' : isOpen ? 'Market OPEN' : 'Market CLOSED'
   
-  const tooltipText = marketStatus?.time_until_close 
+  const tooltipText = hasError
+    ? marketStatus!.error!
+    : marketStatus?.time_until_close 
     ? `Time until close: ${marketStatus.time_until_close}`
     : marketStatus?.next_open
     ? `Next open: ${new Date(marketStatus.next_open).toLocaleString()}`

@@ -247,6 +247,7 @@ class MarketStatusSchema(BaseModel):
     next_open: str | None = None
     next_close: str | None = None
     time_until_close: str | None = None
+    error: str | None = None
 
 
 # =============================================================================

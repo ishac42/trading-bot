@@ -17,7 +17,7 @@ from app.exceptions import NotFoundError, BadRequestError, ExternalServiceError
 from app.models import Position, Trade, utcnow, generate_uuid
 from app.schemas import PositionResponseSchema
 from app.websocket_manager import ws_manager
-from app.alpaca_client import alpaca_client
+from app.alpaca_client import get_alpaca_client
 from app.trading_engine import generate_client_order_id, trading_engine
 
 logger = structlog.get_logger(__name__)
@@ -92,11 +92,12 @@ async def get_unmanaged_positions(db: AsyncSession = Depends(get_db)):
     Compares Alpaca's actual positions (per symbol) against the sum of
     our open DB positions per symbol. Any excess quantity is "unmanaged."
     """
-    if not alpaca_client:
+    client = get_alpaca_client()
+    if not client:
         return []
 
     try:
-        alpaca_positions = await alpaca_client.get_positions()
+        alpaca_positions = await client.get_positions()
     except Exception as e:
         logger.error("Failed to fetch Alpaca positions for unmanaged check: %s", e)
         return []
@@ -148,12 +149,13 @@ async def close_unmanaged_position(
     Close an unmanaged Alpaca position (not tracked in our DB).
     Sells the given quantity of the symbol at market price directly via Alpaca.
     """
-    if not alpaca_client:
+    client = get_alpaca_client()
+    if not client:
         raise ExternalServiceError("Alpaca", "Alpaca client not configured")
 
     try:
         import asyncio
-        order_result = await alpaca_client.submit_market_order(
+        order_result = await client.submit_market_order(
             symbol=symbol,
             qty=quantity,
             side="sell",
@@ -166,7 +168,7 @@ async def close_unmanaged_position(
         )
 
         await asyncio.sleep(1)
-        order_status = await alpaca_client.get_order(order_id)
+        order_status = await client.get_order(order_id)
         fill_price = order_status.get("filled_avg_price")
 
         return {
@@ -216,9 +218,10 @@ async def close_position(
     sell_price = position.current_price
     coid = generate_client_order_id(position.bot_id)
 
-    if alpaca_client:
+    client = get_alpaca_client()
+    if client:
         try:
-            order_result = await alpaca_client.submit_market_order(
+            order_result = await client.submit_market_order(
                 symbol=position.symbol,
                 qty=position.quantity,
                 side="sell",
@@ -234,7 +237,7 @@ async def close_position(
             # Wait briefly for fill then fetch actual price
             import asyncio
             await asyncio.sleep(1)
-            order_status = await alpaca_client.get_order(order_id)
+            order_status = await client.get_order(order_id)
             if order_status.get("filled_avg_price"):
                 sell_price = order_status["filled_avg_price"]
         except Exception as e:

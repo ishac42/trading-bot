@@ -29,7 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import uuid as _uuid
 
-from app.alpaca_client import alpaca_client, AlpacaClient
+from app.alpaca_client import get_alpaca_client, AlpacaClient
 from app.database import async_session
 from app.models import Bot, Trade, Position, generate_uuid, utcnow
 from app.websocket_manager import ws_manager
@@ -181,12 +181,13 @@ class BotRunner:
           Phase 2 — BUY CHECK:  If no open position, check all indicators
                     for a BUY signal. First one wins.
         """
-        if not alpaca_client:
+        client = get_alpaca_client()
+        if not client:
             return
 
         try:
             # 1. Fetch recent bars (50 x 1-min bars gives enough history for most indicators)
-            bars = await alpaca_client.get_bars(symbol, timeframe="1Min", limit=50)
+            bars = await client.get_bars(symbol, timeframe="1Min", limit=50)
             if not bars:
                 logger.debug("No bars returned for %s, skipping", symbol)
                 return
@@ -218,7 +219,7 @@ class BotRunner:
                         indicators_snapshot, indicators_config
                     )
                     if signal == Signal.SELL:
-                        current_price = await alpaca_client.get_latest_price(symbol)
+                        current_price = await client.get_latest_price(symbol)
                         if current_price > 0:
                             full_snapshot["signal_details"] = signal_details
                             await self._execute_sell(
@@ -228,7 +229,7 @@ class BotRunner:
                 else:
                     entry_signal = per_indicator_signals.get(entry_ind, Signal.HOLD)
                     if entry_signal == Signal.SELL:
-                        current_price = await alpaca_client.get_latest_price(symbol)
+                        current_price = await client.get_latest_price(symbol)
                         if current_price > 0:
                             full_snapshot["exit_indicator"] = entry_ind
                             full_snapshot["exit_signal"] = entry_signal.value
@@ -254,7 +255,7 @@ class BotRunner:
                     return  # All indicators say HOLD or SELL — no action
 
                 # Get current price
-                current_price = await alpaca_client.get_latest_price(symbol)
+                current_price = await client.get_latest_price(symbol)
                 if current_price <= 0:
                     return
 
@@ -295,7 +296,8 @@ class BotRunner:
         Execute a BUY: calculate size -> submit order -> record in DB -> emit WS events.
         Tags the new position with the entry_indicator that triggered the buy.
         """
-        if not alpaca_client:
+        client = get_alpaca_client()
+        if not client:
             return
 
         risk_config = self.config.get("risk_management", {})
@@ -309,7 +311,7 @@ class BotRunner:
         try:
             coid = generate_client_order_id(self.bot_id)
 
-            order_result = await alpaca_client.submit_market_order(
+            order_result = await client.submit_market_order(
                 symbol=symbol, qty=qty, side="buy", time_in_force="day",
                 client_order_id=coid,
             )
@@ -423,7 +425,8 @@ class BotRunner:
         reason: str = "Sell signal",
     ) -> None:
         """Close the open position for this symbol if one exists."""
-        if not alpaca_client:
+        client = get_alpaca_client()
+        if not client:
             return
 
         async with async_session() as session:
@@ -442,7 +445,7 @@ class BotRunner:
             try:
                 coid = generate_client_order_id(self.bot_id)
 
-                order_result = await alpaca_client.submit_market_order(
+                order_result = await client.submit_market_order(
                     symbol=symbol,
                     qty=position.quantity,
                     side="sell",
@@ -560,7 +563,8 @@ class BotRunner:
         Check all open positions for this bot against their SL/TP levels.
         Auto-sell any position where current price has breached the threshold.
         """
-        if not alpaca_client:
+        client = get_alpaca_client()
+        if not client:
             return
 
         try:
@@ -575,7 +579,7 @@ class BotRunner:
 
             for pos in positions:
                 try:
-                    current_price = await alpaca_client.get_latest_price(pos.symbol)
+                    current_price = await client.get_latest_price(pos.symbol)
                     if current_price <= 0:
                         continue
 
@@ -646,10 +650,11 @@ class BotRunner:
         Wait for an order to fill, retrying up to max_attempts times.
         Returns the order status dict.
         """
+        client = get_alpaca_client()
         order_status: dict[str, Any] = {}
         for attempt in range(max_attempts):
             await asyncio.sleep(1)
-            order_status = await alpaca_client.get_order(order_id)
+            order_status = await client.get_order(order_id)
             if order_status.get("status") == "filled":
                 return order_status
             if order_status.get("status") in ("canceled", "cancelled", "expired", "rejected"):
@@ -904,11 +909,12 @@ class TradingEngine:
 
     async def _update_market_status(self) -> None:
         """Fetch current market status from Alpaca."""
-        if not alpaca_client:
+        client = get_alpaca_client()
+        if not client:
             self.market_is_open = False
             return
         try:
-            clock = await alpaca_client.get_clock()
+            clock = await client.get_clock()
             self.market_is_open = clock["is_open"]
         except Exception as e:
             logger.error("Failed to fetch market clock: %s", e)

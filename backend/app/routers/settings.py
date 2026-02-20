@@ -200,7 +200,7 @@ async def test_broker_connection(
         )
 
     try:
-        from app.alpaca_client import AlpacaClient
+        from app.alpaca_client import AlpacaClient, reinitialize_alpaca_client
 
         client = AlpacaClient(
             api_key=api_key,
@@ -212,6 +212,9 @@ async def test_broker_connection(
         data["is_connected"] = True
         data["last_verified"] = datetime.now(timezone.utc).isoformat()
         await _upsert_settings(db, user.id, "broker", data)
+
+        reinitialize_alpaca_client(api_key, secret_key, base_url)
+        logger.info("alpaca_client_hot_swapped", user_id=user.id)
 
         return BrokerTestResponse(
             success=True,

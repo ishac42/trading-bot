@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.alpaca_client import alpaca_client
+from app.alpaca_client import get_alpaca_client
 from app.database import get_db
 from app.exceptions import ExternalServiceError
 from app.models import Bot, Position, Trade
@@ -31,17 +31,16 @@ async def get_market_status():
     Get current market status from Alpaca clock API.
     Falls back to a safe default if the Alpaca client is unavailable.
     """
-    if alpaca_client is None:
+    client = get_alpaca_client()
+    if client is None:
         logger.warning("Alpaca client not configured — returning placeholder market status")
         return MarketStatusSchema(
             is_open=False,
-            next_open=None,
-            next_close=None,
-            time_until_close=None,
+            error="Alpaca API credentials not configured",
         )
 
     try:
-        clock = await alpaca_client.get_clock()
+        clock = await client.get_clock()
         return MarketStatusSchema(
             is_open=clock["is_open"],
             next_open=clock["next_open"],
@@ -50,12 +49,14 @@ async def get_market_status():
         )
     except Exception as e:
         logger.error("Failed to fetch market status from Alpaca: %s", e)
-        # Return a safe fallback rather than raising a 500
+        error_str = str(e)
+        if "401" in error_str or "Authorization" in error_str:
+            error_msg = "Alpaca API authentication failed — check your API keys"
+        else:
+            error_msg = "Unable to reach Alpaca API"
         return MarketStatusSchema(
             is_open=False,
-            next_open=None,
-            next_close=None,
-            time_until_close=None,
+            error=error_msg,
         )
 
 
@@ -65,7 +66,8 @@ async def get_market_data(symbol: str):
     Get market data for a specific symbol (latest quote + recent bar).
     Falls back to zeroes if the Alpaca client is unavailable.
     """
-    if alpaca_client is None:
+    client = get_alpaca_client()
+    if client is None:
         logger.warning("Alpaca client not configured — returning placeholder market data")
         return {
             "symbol": symbol.upper(),
@@ -78,7 +80,7 @@ async def get_market_data(symbol: str):
         }
 
     try:
-        quote = await alpaca_client.get_latest_quote(symbol.upper())
+        quote = await client.get_latest_quote(symbol.upper())
 
         # Calculate price and mid-price
         bid = quote["bid_price"]
@@ -89,7 +91,7 @@ async def get_market_data(symbol: str):
         change = 0.0
         change_percent = 0.0
         try:
-            bars = await alpaca_client.get_bars(symbol.upper(), timeframe="1Day", limit=2)
+            bars = await client.get_bars(symbol.upper(), timeframe="1Day", limit=2)
             if len(bars) >= 2:
                 prev_close = bars[-2]["close"]
                 current_close = bars[-1]["close"]

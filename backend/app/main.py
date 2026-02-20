@@ -23,10 +23,42 @@ from app.logging_config import configure_logging
 from app.middleware import register_middleware_and_handlers
 from app.routers import account, auth, bots, trades, positions, market_data, settings as settings_router
 from app.websocket_manager import socket_app
-from app.alpaca_client import alpaca_client
+from app.alpaca_client import get_alpaca_client, reinitialize_alpaca_client
+from app.database import async_session
+from app.models import AppSettings
 from app.trading_engine import trading_engine
 
 logger = structlog.get_logger(__name__)
+
+PAPER_BASE_URL = "https://paper-api.alpaca.markets"
+
+
+async def _load_db_broker_credentials() -> None:
+    """
+    On startup, check if the DB has saved broker credentials and use them
+    to reinitialize the Alpaca client. This ensures credentials saved via
+    the Settings UI survive server restarts.
+    """
+    try:
+        async with async_session() as session:
+            from sqlalchemy import select
+            result = await session.execute(
+                select(AppSettings).where(AppSettings.category == "broker")
+            )
+            row = result.scalar_one_or_none()
+            if not row:
+                return
+
+            data = row.settings or {}
+            api_key = data.get("alpaca_api_key")
+            secret_key = data.get("alpaca_secret_key")
+            base_url = data.get("base_url", PAPER_BASE_URL)
+
+            if api_key and secret_key:
+                reinitialize_alpaca_client(api_key, secret_key, base_url)
+                logger.info("alpaca_client_loaded_from_db_settings")
+    except Exception as e:
+        logger.warning("Failed to load broker credentials from DB: %s", e)
 
 
 @asynccontextmanager
@@ -44,8 +76,11 @@ async def lifespan(app: FastAPI):
     )
     logger.info("websocket_mounted", path="/ws")
 
-    if alpaca_client:
-        logger.info("alpaca_connected", paper=alpaca_client.is_paper)
+    await _load_db_broker_credentials()
+
+    client = get_alpaca_client()
+    if client:
+        logger.info("alpaca_connected", paper=client.is_paper)
     else:
         logger.warning("alpaca_not_configured")
 
@@ -97,8 +132,8 @@ async def health_check():
     return {
         "status": "healthy",
         "environment": app_config.ENVIRONMENT,
-        "alpaca_connected": alpaca_client is not None,
-        "alpaca_paper": alpaca_client.is_paper if alpaca_client else None,
+        "alpaca_connected": (ac := get_alpaca_client()) is not None,
+        "alpaca_paper": ac.is_paper if ac else None,
         "engine_running": trading_engine._running,
         "active_bots": len(trading_engine.bots),
         "market_open": trading_engine.market_is_open,

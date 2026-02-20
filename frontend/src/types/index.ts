@@ -116,6 +116,7 @@ export interface MarketStatus {
   next_open?: string
   next_close?: string
   time_until_close?: string
+  error?: string
 }
 
 /**

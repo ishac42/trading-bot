@@ -26,7 +26,7 @@ from app.schemas import BotCreateSchema, BotResponseSchema, BotUpdateSchema
 from app.models import utcnow, generate_uuid
 from app.websocket_manager import ws_manager
 from app.trading_engine import trading_engine
-from app.alpaca_client import alpaca_client
+from app.alpaca_client import get_alpaca_client
 
 logger = structlog.get_logger(__name__)
 
@@ -41,12 +41,13 @@ async def _validate_capital(
     Raises BadRequestError if validation fails.
     Silently passes if Alpaca is not configured (allows dev/testing without Alpaca).
     """
-    if not alpaca_client:
+    client = get_alpaca_client()
+    if not client:
         return
 
     try:
         from app.routers.account import get_allocated_capital
-        account = await alpaca_client.get_account()
+        account = await client.get_account()
         allocated = await get_allocated_capital(db, exclude_bot_id=exclude_bot_id)
         available = account["buying_power"] - allocated
 
