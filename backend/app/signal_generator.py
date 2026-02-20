@@ -324,26 +324,21 @@ class SignalGenerator:
     @staticmethod
     def _eval_macd(values: dict[str, Any], params: dict[str, Any]) -> Signal:
         """
-        MACD signal:
-        - BUY  when MACD line crosses above signal line (histogram > 0 and increasing)
-        - SELL when MACD line crosses below signal line (histogram < 0 and decreasing)
-        - HOLD otherwise
-
-        Simplified: we only have the current snapshot, so:
-        - histogram > 0 → bullish (BUY)
-        - histogram < 0 → bearish (SELL)
-        - ~0 → HOLD
+        MACD crossover signal:
+        - BUY  when histogram crosses from ≤ 0 to > 0 (bullish crossover)
+        - SELL when histogram crosses from ≥ 0 to < 0 (bearish crossover)
+        - HOLD otherwise (including when prev_histogram is unavailable)
         """
         histogram = values.get("histogram")
-        if histogram is None:
+        prev_histogram = values.get("prev_histogram")
+        if histogram is None or prev_histogram is None:
             return Signal.HOLD
 
-        # Use a small threshold to avoid noise
         threshold = 0.01
 
-        if histogram > threshold:
+        if histogram > threshold and prev_histogram <= threshold:
             return Signal.BUY
-        if histogram < -threshold:
+        if histogram < -threshold and prev_histogram >= -threshold:
             return Signal.SELL
         return Signal.HOLD
 

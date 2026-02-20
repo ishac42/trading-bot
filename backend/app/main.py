@@ -17,35 +17,70 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import settings
+from app.config import settings as app_config
 from app.database import engine
 from app.logging_config import configure_logging
 from app.middleware import register_middleware_and_handlers
-from app.routers import account, bots, trades, positions, market_data
+from app.routers import account, auth, bots, trades, positions, market_data, settings as settings_router
 from app.websocket_manager import socket_app
-from app.alpaca_client import alpaca_client
+from app.alpaca_client import get_alpaca_client, reinitialize_alpaca_client
+from app.database import async_session
+from app.models import AppSettings
 from app.trading_engine import trading_engine
 
 logger = structlog.get_logger(__name__)
+
+PAPER_BASE_URL = "https://paper-api.alpaca.markets"
+
+
+async def _load_db_broker_credentials() -> None:
+    """
+    On startup, check if the DB has saved broker credentials and use them
+    to reinitialize the Alpaca client. This ensures credentials saved via
+    the Settings UI survive server restarts.
+    """
+    try:
+        async with async_session() as session:
+            from sqlalchemy import select
+            result = await session.execute(
+                select(AppSettings).where(AppSettings.category == "broker")
+            )
+            row = result.scalar_one_or_none()
+            if not row:
+                return
+
+            data = row.settings or {}
+            api_key = data.get("alpaca_api_key")
+            secret_key = data.get("alpaca_secret_key")
+            base_url = data.get("base_url", PAPER_BASE_URL)
+
+            if api_key and secret_key:
+                reinitialize_alpaca_client(api_key, secret_key, base_url)
+                logger.info("alpaca_client_loaded_from_db_settings")
+    except Exception as e:
+        logger.warning("Failed to load broker credentials from DB: %s", e)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application startup and shutdown lifecycle."""
     configure_logging(
-        environment=settings.ENVIRONMENT,
-        log_level=settings.LOG_LEVEL,
+        environment=app_config.ENVIRONMENT,
+        log_level=app_config.LOG_LEVEL,
     )
 
     logger.info(
         "app_starting",
-        app_name=settings.APP_NAME,
-        environment=settings.ENVIRONMENT,
+        app_name=app_config.APP_NAME,
+        environment=app_config.ENVIRONMENT,
     )
     logger.info("websocket_mounted", path="/ws")
 
-    if alpaca_client:
-        logger.info("alpaca_connected", paper=alpaca_client.is_paper)
+    await _load_db_broker_credentials()
+
+    client = get_alpaca_client()
+    if client:
+        logger.info("alpaca_connected", paper=client.is_paper)
     else:
         logger.warning("alpaca_not_configured")
 
@@ -61,7 +96,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title=settings.APP_NAME,
+    title=app_config.APP_NAME,
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -72,18 +107,20 @@ register_middleware_and_handlers(app)
 # CORS — allow frontend dev servers
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=app_config.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Register routers under /api prefix
+app.include_router(auth.router, prefix="/api")
 app.include_router(account.router, prefix="/api")
 app.include_router(bots.router, prefix="/api")
 app.include_router(trades.router, prefix="/api")
 app.include_router(positions.router, prefix="/api")
 app.include_router(market_data.router, prefix="/api")
+app.include_router(settings_router.router, prefix="/api")
 
 # Mount Socket.IO at /ws — frontend connects via socket.io-client to ws://host:8000/ws
 app.mount("/ws", socket_app)
@@ -94,9 +131,9 @@ async def health_check():
     """Health check endpoint for monitoring."""
     return {
         "status": "healthy",
-        "environment": settings.ENVIRONMENT,
-        "alpaca_connected": alpaca_client is not None,
-        "alpaca_paper": alpaca_client.is_paper if alpaca_client else None,
+        "environment": app_config.ENVIRONMENT,
+        "alpaca_connected": (ac := get_alpaca_client()) is not None,
+        "alpaca_paper": ac.is_paper if ac else None,
         "engine_running": trading_engine._running,
         "active_bots": len(trading_engine.bots),
         "market_open": trading_engine.market_is_open,

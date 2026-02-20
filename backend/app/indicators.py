@@ -164,7 +164,7 @@ class IndicatorCalculator:
         Signal line = EMA(MACD, signal)
         Histogram   = MACD - Signal
 
-        Returns: { macd, signal, histogram, fast, slow, signal_period }
+        Returns: { macd, signal, histogram, prev_histogram, fast, slow, signal_period }
         """
         fast = int(params.get("fast", 12))
         slow = int(params.get("slow", 26))
@@ -188,10 +188,15 @@ class IndicatorCalculator:
         if any(pd.isna(v) for v in (m, s, h)):
             return None
 
+        prev_h = histogram.iloc[-2] if len(histogram) >= 2 else None
+        if prev_h is not None and pd.isna(prev_h):
+            prev_h = None
+
         return {
             "macd": round(float(m), 4),
             "signal": round(float(s), 4),
             "histogram": round(float(h), 4),
+            "prev_histogram": round(float(prev_h), 4) if prev_h is not None else None,
             "fast": fast,
             "slow": slow,
             "signal_period": signal_period,

@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     ALPACA_SECRET_KEY: str = ""
     ALPACA_BASE_URL: str = "https://paper-api.alpaca.markets"
 
+    # Authentication
+    GOOGLE_CLIENT_ID: str = ""
+    JWT_SECRET: str = "change-me-in-production"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRY_HOURS: int = 24
+
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:5175", "http://localhost:3000"]
 

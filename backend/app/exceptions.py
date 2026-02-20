@@ -37,6 +37,16 @@ class AppException(Exception):
         super().__init__(self.message)
 
 
+class UnauthorizedError(AppException):
+    """Authentication required or token invalid (401)."""
+
+    status_code = 401
+    error_code = "UNAUTHORIZED"
+
+    def __init__(self, message: str = "Authentication required", **kwargs: Any) -> None:
+        super().__init__(message, **kwargs)
+
+
 class NotFoundError(AppException):
     """Resource not found (404)."""
 

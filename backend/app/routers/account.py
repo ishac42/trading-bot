@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.alpaca_client import alpaca_client
+from app.alpaca_client import get_alpaca_client
 from app.database import get_db
 from app.models import Bot, Position, Trade
 
@@ -67,7 +67,8 @@ async def get_account(db: AsyncSession = Depends(get_db)):
     allocated = await get_allocated_capital(db)
     realized = round(await get_total_realized_gains(db), 2)
 
-    if not alpaca_client:
+    client = get_alpaca_client()
+    if not client:
         logger.warning("Alpaca client not configured — returning DB-only account info")
         return {
             "account_number": None,
@@ -81,7 +82,7 @@ async def get_account(db: AsyncSession = Depends(get_db)):
         }
 
     try:
-        account = await alpaca_client.get_account()
+        account = await client.get_account()
         buying_power = account["buying_power"]
         available = buying_power - allocated
 
@@ -122,7 +123,8 @@ async def reconcile(
       - discrepancies: list of issues found
       - last_checked: ISO timestamp of this check
     """
-    if not alpaca_client:
+    client = get_alpaca_client()
+    if not client:
         return {
             "synced_count": 0,
             "discrepancies": [],
@@ -131,7 +133,7 @@ async def reconcile(
         }
 
     try:
-        alpaca_orders = await alpaca_client.get_orders(status="closed", limit=limit)
+        alpaca_orders = await client.get_orders(status="closed", limit=limit)
     except Exception as e:
         logger.error("Reconcile: failed to fetch Alpaca orders: %s", e)
         return {

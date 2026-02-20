@@ -18,6 +18,33 @@ from pydantic import BaseModel, ConfigDict
 
 
 # =============================================================================
+# Auth Schemas — matches frontend User interface and auth flow
+# =============================================================================
+
+class GoogleAuthRequest(BaseModel):
+    """Request body for Google OAuth login."""
+    credential: str
+
+
+class UserResponse(BaseModel):
+    """User profile returned after authentication."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    email: str
+    name: str
+    avatar_url: str | None = None
+    provider: str
+    created_at: str
+
+
+class AuthResponse(BaseModel):
+    """Response after successful authentication."""
+    token: str
+    user: UserResponse
+
+
+# =============================================================================
 # Error Response — consistent error shape for all endpoints
 # =============================================================================
 
@@ -101,6 +128,9 @@ class BotResponseSchema(BaseModel):
     is_active: bool
     error_count: int
     realized_gains: float = 0.0
+    trades_today: int = 0
+    win_rate: float = 0.0
+    today_pnl: float = 0.0
 
 
 # =============================================================================
@@ -124,7 +154,12 @@ class TradeResponseSchema(BaseModel):
     indicators_snapshot: dict[str, Any] | None = None
     profit_loss: float | None = None
     order_id: str | None = None
-    status: Literal["pending", "filled", "cancelled", "failed"]
+    status: Literal[
+        "pending", "filled", "cancelled", "failed",
+        "accepted", "partially_filled", "pending_new",
+        "new", "done_for_day", "expired", "replaced",
+        "stopped", "rejected", "suspended", "calculated",
+    ]
     commission: float | None = None
     slippage: float | None = None
     client_order_id: str | None = None
@@ -212,6 +247,7 @@ class MarketStatusSchema(BaseModel):
     next_open: str | None = None
     next_close: str | None = None
     time_until_close: str | None = None
+    error: str | None = None
 
 
 # =============================================================================
@@ -338,3 +374,76 @@ class AnalyticsDataSchema(BaseModel):
     pnlTimeSeries: list[AnalyticsPnLDataPointSchema]
     botPerformance: list[BotPerformanceDataSchema]
     symbolPerformance: list[SymbolPerformanceDataSchema]
+
+
+# =============================================================================
+# Settings Schemas — matches frontend Settings* interfaces
+# =============================================================================
+
+class BrokerSettingsSchema(BaseModel):
+    """Broker connection settings."""
+    alpaca_api_key: str = ""
+    alpaca_secret_key: str = ""
+    base_url: str = "https://paper-api.alpaca.markets"
+    is_paper: bool = True
+
+
+class BrokerSettingsResponse(BaseModel):
+    """Broker settings with keys masked."""
+    alpaca_api_key_masked: str = ""
+    alpaca_secret_key_masked: str = ""
+    base_url: str = "https://paper-api.alpaca.markets"
+    is_paper: bool = True
+    is_connected: bool = False
+    last_verified: str | None = None
+
+
+class NotificationSettingsSchema(BaseModel):
+    """Notification preference settings."""
+    email_enabled: bool = False
+    email_address: str = ""
+    notify_trade_executed: bool = True
+    notify_bot_error: bool = True
+    notify_daily_summary: bool = False
+    notify_stop_loss_hit: bool = True
+    notify_market_hours: bool = False
+
+
+class DisplaySettingsSchema(BaseModel):
+    """Display preference settings."""
+    timezone: str = "America/New_York"
+    currency: str = "USD"
+    decimal_places: int = 2
+    date_format: str = "MM/DD/YYYY"
+    refresh_interval: int = 30
+
+
+class SettingsCategoryResponse(BaseModel):
+    """Single settings category response."""
+    category: str
+    settings: dict[str, Any]
+    updated_at: str | None = None
+
+
+class AllSettingsResponse(BaseModel):
+    """All settings for the current user."""
+    broker: BrokerSettingsResponse
+    notifications: NotificationSettingsSchema
+    display: DisplaySettingsSchema
+
+
+class BrokerTestResponse(BaseModel):
+    """Result of testing broker connection."""
+    success: bool
+    message: str
+    account_id: str | None = None
+    equity: float | None = None
+    buying_power: float | None = None
+
+
+class DataStatsResponse(BaseModel):
+    """Storage usage stats for data management section."""
+    total_bots: int
+    total_trades: int
+    total_positions: int
+    open_positions: int

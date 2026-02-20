@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react'
+import React, { useCallback } from 'react'
 import {
   Box,
   Typography,
@@ -32,37 +32,6 @@ interface BotListCardProps {
   onStart?: (botId: string) => void
   onClick?: (botId: string) => void
   actionLoading?: string | null
-}
-
-/**
- * Deterministic mock metrics based on bot ID so they don't change on re-render.
- */
-function getMockMetrics(bot: Bot) {
-  // Simple hash from bot id to get stable numbers
-  let hash = 0
-  for (let i = 0; i < bot.id.length; i++) {
-    hash = (hash * 31 + bot.id.charCodeAt(i)) | 0
-  }
-  const seed = Math.abs(hash)
-
-  const tradesToday = (seed % 15) + 1
-  const winRate = 50 + (seed % 35)
-
-  let pnl: number
-  let pnlPct: number
-
-  if (bot.status === 'running') {
-    pnl = ((seed % 500) + 50) * (seed % 3 === 0 ? -1 : 1)
-    pnlPct = parseFloat(((pnl / bot.capital) * 100).toFixed(2))
-  } else if (bot.status === 'paused') {
-    pnl = ((seed % 200) + 10) * (seed % 2 === 0 ? -1 : 1)
-    pnlPct = parseFloat(((pnl / bot.capital) * 100).toFixed(2))
-  } else {
-    pnl = (seed % 2000) - 300
-    pnlPct = parseFloat(((pnl / bot.capital) * 100).toFixed(2))
-  }
-
-  return { pnl, pnlPct, tradesToday, winRate }
 }
 
 /**
@@ -110,11 +79,9 @@ export const BotListCard: React.FC<BotListCardProps> = ({
   )
   const handleClick = useCallback(() => onClick?.(bot.id), [bot.id, onClick])
 
-  // Stable mock metrics derived from bot data
-  const { pnl, pnlPct, tradesToday, winRate } = useMemo(
-    () => getMockMetrics(bot),
-    [bot]
-  )
+  const pnlPct = bot.capital > 0
+    ? parseFloat(((bot.today_pnl / bot.capital) * 100).toFixed(2))
+    : 0
 
   // --- Action buttons depend on status ---
   const statusActions = (
@@ -212,17 +179,17 @@ export const BotListCard: React.FC<BotListCardProps> = ({
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: { xs: 1, sm: 2 }, alignItems: 'center' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
           <Typography variant="body2" color="text.secondary">P&L:</Typography>
-          <PnLDisplay amount={pnl} percentage={pnlPct} showSign size="small" bold />
+          <PnLDisplay amount={bot.today_pnl} percentage={pnlPct} showSign size="small" bold />
         </Box>
         <Divider orientation="vertical" flexItem />
         <Typography variant="body2" color="text.secondary">
-          Trades: <Box component="span" sx={{ fontWeight: 600, color: 'text.primary' }}>{tradesToday}</Box>
+          Trades: <Box component="span" sx={{ fontWeight: 600, color: 'text.primary' }}>{bot.trades_today}</Box>
         </Typography>
         <Divider orientation="vertical" flexItem />
         <Typography variant="body2" color="text.secondary">
           Win Rate:{' '}
-          <Box component="span" sx={{ fontWeight: 600, color: winRate >= 50 ? 'success.main' : 'error.main' }}>
-            {winRate}%
+          <Box component="span" sx={{ fontWeight: 600, color: bot.win_rate >= 50 ? 'success.main' : 'error.main' }}>
+            {bot.win_rate}%
           </Box>
         </Typography>
         <Divider orientation="vertical" flexItem />

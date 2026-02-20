@@ -505,7 +505,7 @@ class AlpacaClient:
 
 
 # ---------------------------------------------------------------------------
-# Singleton — import this wherever you need to call Alpaca APIs
+# Singleton — use get_alpaca_client() to access the current instance
 # ---------------------------------------------------------------------------
 
 def create_alpaca_client() -> AlpacaClient | None:
@@ -526,5 +526,33 @@ def create_alpaca_client() -> AlpacaClient | None:
         return None
 
 
-# Create on import — available app-wide
-alpaca_client: AlpacaClient | None = create_alpaca_client()
+# Create on import — mutable; use get_alpaca_client() for live reference
+_alpaca_client: AlpacaClient | None = create_alpaca_client()
+
+
+def get_alpaca_client() -> AlpacaClient | None:
+    """Return the current global AlpacaClient singleton."""
+    return _alpaca_client
+
+
+def reinitialize_alpaca_client(
+    api_key: str, secret_key: str, base_url: str
+) -> AlpacaClient | None:
+    """
+    Replace the global AlpacaClient singleton with new credentials.
+    Called when the user saves/tests new broker settings via the UI.
+    """
+    global _alpaca_client
+    try:
+        _alpaca_client = AlpacaClient(
+            api_key=api_key, secret_key=secret_key, base_url=base_url
+        )
+        logger.info("Alpaca client reinitialized with new credentials")
+        return _alpaca_client
+    except Exception as e:
+        logger.error("Failed to reinitialize Alpaca client: %s", e)
+        return None
+
+
+# Backward compat alias (prefer get_alpaca_client() for hot-swap support)
+alpaca_client = _alpaca_client

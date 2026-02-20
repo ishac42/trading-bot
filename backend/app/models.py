@@ -1,5 +1,5 @@
 """
-SQLAlchemy ORM models for Bots, Trades, and Positions.
+SQLAlchemy ORM models for Users, Bots, Trades, and Positions.
 
 These models define the database schema and must align with:
 - Frontend TypeScript interfaces in types/index.ts
@@ -10,7 +10,7 @@ These models define the database schema and must align with:
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Float, Index, Integer, String, Text, ForeignKey
+from sqlalchemy import Boolean, DateTime, Float, Index, Integer, String, Text, ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -25,6 +25,72 @@ def generate_uuid() -> str:
 def utcnow() -> datetime:
     """Return current UTC datetime."""
     return datetime.now(timezone.utc)
+
+
+# =============================================================================
+# Users Table — matches frontend User interface in types/index.ts
+# =============================================================================
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=generate_uuid
+    )
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True, default=None)
+    google_sub: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    provider: Mapped[str] = mapped_column(String(50), nullable=False, default="google")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    last_login_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+    # Relationships
+    settings: Mapped[list["AppSettings"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        Index("ix_users_google_sub", "google_sub"),
+        Index("ix_users_email", "email"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<User(id={self.id!r}, email={self.email!r})>"
+
+
+# =============================================================================
+# AppSettings Table — per-user settings stored as JSON by category
+# =============================================================================
+
+class AppSettings(Base):
+    __tablename__ = "app_settings"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=generate_uuid
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    category: Mapped[str] = mapped_column(String(50), nullable=False)
+    settings: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+    user: Mapped["User"] = relationship(back_populates="settings")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "category", name="uq_user_category"),
+        Index("ix_app_settings_user_id", "user_id"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<AppSettings(user_id={self.user_id!r}, category={self.category!r})>"
 
 
 # =============================================================================
@@ -122,7 +188,7 @@ class Trade(Base):
     )
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="pending"
-    )  # 'pending' | 'filled' | 'cancelled' | 'failed'
+    )  # Alpaca order statuses: pending, filled, cancelled, failed, accepted, partially_filled, pending_new, etc.
     commission: Mapped[float | None] = mapped_column(
         Float, nullable=True, default=None
     )
