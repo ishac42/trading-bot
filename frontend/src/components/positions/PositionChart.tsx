@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react'
 import { Box, Typography } from '@mui/material'
-import { createChart, ColorType } from 'lightweight-charts'
-import type { IChartApi, ISeriesApi, LineSeries, AreaSeries } from 'lightweight-charts'
+import { createChart, ColorType, AreaSeries } from 'lightweight-charts'
+import type { IChartApi } from 'lightweight-charts'
 import type { Position } from '@/types'
 import { useTheme } from '@mui/material/styles'
 
@@ -97,7 +97,7 @@ export const PositionChart: React.FC<PositionChartProps> = ({ position }) => {
 
     // Add area series for price
     const isProfit = position.unrealized_pnl >= 0
-    const areaSeries = chart.addSeries('Area', {
+    const areaSeries = chart.addSeries(AreaSeries, {
       lineColor: isProfit ? '#4caf50' : '#f44336',
       topColor: isProfit
         ? 'rgba(76, 175, 80, 0.3)'

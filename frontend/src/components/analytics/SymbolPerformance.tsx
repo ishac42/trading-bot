@@ -26,7 +26,7 @@ import {
   Cell,
 } from 'recharts'
 import { Card, PnLDisplay } from '@/components/common'
-import { formatCurrency, formatCompactCurrency } from '@/utils/formatters'
+import { formatCompactCurrency } from '@/utils/formatters'
 import type { SymbolPerformanceData } from '@/types'
 
 interface SymbolPerformanceProps {

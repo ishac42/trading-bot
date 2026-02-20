@@ -10,7 +10,7 @@ from app.config import settings
 
 # Async engine — connects to PostgreSQL via asyncpg
 engine = create_async_engine(
-    settings.DATABASE_URL,
+    settings.async_database_url,
     echo=settings.DEBUG,
     pool_size=10,
     max_overflow=20,

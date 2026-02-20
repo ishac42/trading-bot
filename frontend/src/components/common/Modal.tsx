@@ -62,7 +62,7 @@ export const Modal: React.FC<ModalProps> = ({
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
   const handleClose = (
-    event: {},
+    _event: {},
     reason: 'backdropClick' | 'escapeKeyDown'
   ) => {
     if (reason === 'backdropClick' && !closeOnBackdropClick) {

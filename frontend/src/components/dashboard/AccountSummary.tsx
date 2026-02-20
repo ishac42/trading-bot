@@ -142,8 +142,6 @@ export const AccountSummary: React.FC = () => {
   const allocationColor =
     allocationPct > 90 ? 'error' : allocationPct > 70 ? 'warning' : 'success'
 
-  const gainsColor = account.total_realized_gains >= 0 ? 'success.main' : 'error.main'
-
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>

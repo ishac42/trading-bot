@@ -21,7 +21,7 @@ from app.models import User, AppSettings, Bot, Trade, Position  # noqa: F401 —
 config = context.config
 
 # Set the database URL from our app settings (overrides alembic.ini)
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+config.set_main_option("sqlalchemy.url", settings.async_database_url)
 
 # Set up Python logging from the config file
 if config.config_file_name is not None:
