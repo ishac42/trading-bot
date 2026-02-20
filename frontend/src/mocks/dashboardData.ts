@@ -35,6 +35,10 @@ export const mockBots: Bot[] = [
     last_run_at: '2026-02-15T10:23:00Z',
     is_active: true,
     error_count: 0,
+    realized_gains: 0,
+    trades_today: 0,
+    win_rate: 0,
+    today_pnl: 0,
   },
   {
     id: 'bot-2',
@@ -63,6 +67,10 @@ export const mockBots: Bot[] = [
     last_run_at: '2026-02-15T09:55:00Z',
     is_active: true,
     error_count: 0,
+    realized_gains: 0,
+    trades_today: 0,
+    win_rate: 0,
+    today_pnl: 0,
   },
   {
     id: 'bot-3',
@@ -91,6 +99,10 @@ export const mockBots: Bot[] = [
     last_run_at: '2026-02-14T11:45:00Z',
     is_active: false,
     error_count: 0,
+    realized_gains: 0,
+    trades_today: 0,
+    win_rate: 0,
+    today_pnl: 0,
   },
   {
     id: 'bot-4',
@@ -119,6 +131,10 @@ export const mockBots: Bot[] = [
     last_run_at: '2026-02-15T14:00:00Z',
     is_active: true,
     error_count: 0,
+    realized_gains: 0,
+    trades_today: 0,
+    win_rate: 0,
+    today_pnl: 0,
   },
   {
     id: 'bot-5',
@@ -147,6 +163,10 @@ export const mockBots: Bot[] = [
     last_run_at: '2026-02-13T10:00:00Z',
     is_active: false,
     error_count: 2,
+    realized_gains: 0,
+    trades_today: 0,
+    win_rate: 0,
+    today_pnl: 0,
   },
 ]
 

@@ -64,8 +64,6 @@ export const Select: React.FC<SelectProps> = ({
       )
     : label
 
-  const hasValue = value !== '' && value !== undefined && value !== null
-
   return (
     <FormControl fullWidth error={error} sx={sx}>
       <InputLabel id={`${label}-label`}>{displayLabel}</InputLabel>

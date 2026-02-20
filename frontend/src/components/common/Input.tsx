@@ -1,10 +1,8 @@
 import React from 'react'
 import {
   TextField,
-  InputAdornment,
 } from '@mui/material'
 import type { SxProps, Theme } from '@mui/system'
-import { RequiredIndicator } from './Input.styles'
 
 type TextFieldProps = React.ComponentProps<typeof TextField>
 

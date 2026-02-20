@@ -15,7 +15,6 @@ import {
   useMediaQuery,
 } from '@mui/material'
 import { Card, PnLDisplay, StatusBadge } from '@/components/common'
-import { formatCurrency } from '@/utils/formatters'
 import type { BotPerformanceData } from '@/types'
 
 interface BotComparisonTableProps {

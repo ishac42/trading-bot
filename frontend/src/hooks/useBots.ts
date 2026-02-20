@@ -75,6 +75,10 @@ export const useCreateBot = () => {
           updated_at: new Date().toISOString(),
           is_active: false,
           error_count: 0,
+          realized_gains: 0,
+          trades_today: 0,
+          win_rate: 0,
+          today_pnl: 0,
         }
         // Add to mock data (won't persist across page refreshes)
         mockBots.push(newBot)
