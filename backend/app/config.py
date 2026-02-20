@@ -3,6 +3,9 @@ Application configuration loaded from environment variables.
 Uses pydantic-settings for type-safe configuration management.
 """
 
+import json
+
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -44,6 +47,19 @@ class Settings(BaseSettings):
 
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:5175", "http://localhost:3000"]
+
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v: object) -> list[str]:
+        """Accept JSON array string, comma-separated string, or list."""
+        if isinstance(v, list):
+            return v
+        if isinstance(v, str):
+            v = v.strip()
+            if v.startswith("["):
+                return json.loads(v)
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
 
     # WebSocket
     WS_PING_INTERVAL: int = 25
