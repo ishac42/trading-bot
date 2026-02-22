@@ -12,9 +12,10 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth import get_current_user
 from app.database import get_db
 from app.exceptions import NotFoundError, BadRequestError, ExternalServiceError
-from app.models import Position, Trade, utcnow, generate_uuid
+from app.models import Bot, Position, Trade, User, utcnow, generate_uuid
 from app.schemas import PositionResponseSchema
 from app.websocket_manager import ws_manager
 from app.alpaca_client import get_alpaca_client
@@ -61,10 +62,13 @@ async def get_positions(
     symbol: str = Query(""),
     sortBy: str = Query("opened_at"),
     sortOrder: str = Query("desc"),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """List open positions with optional filters and sorting."""
-    query = select(Position).where(Position.is_open.is_(True))
+    """List open positions owned by the current user."""
+    query = select(Position).join(Bot).where(
+        Position.is_open.is_(True), Bot.user_id == user.id
+    )
 
     # Filters
     if botId:
@@ -85,7 +89,10 @@ async def get_positions(
 
 
 @router.get("/unmanaged")
-async def get_unmanaged_positions(db: AsyncSession = Depends(get_db)):
+async def get_unmanaged_positions(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """
     Detect positions in Alpaca that are not fully tracked in our DB.
 
@@ -102,10 +109,11 @@ async def get_unmanaged_positions(db: AsyncSession = Depends(get_db)):
         logger.error("Failed to fetch Alpaca positions for unmanaged check: %s", e)
         return []
 
-    # Sum our DB open positions per symbol
+    # Sum our DB open positions per symbol (scoped to user's bots)
     db_result = await db.execute(
         select(Position.symbol, func.sum(Position.quantity))
-        .where(Position.is_open.is_(True))
+        .join(Bot)
+        .where(Position.is_open.is_(True), Bot.user_id == user.id)
         .group_by(Position.symbol)
     )
     db_qty_map: dict[str, int] = {row[0]: int(row[1]) for row in db_result}
@@ -144,6 +152,7 @@ async def get_unmanaged_positions(db: AsyncSession = Depends(get_db)):
 async def close_unmanaged_position(
     symbol: str = Query(...),
     quantity: int = Query(..., ge=1),
+    user: User = Depends(get_current_user),
 ):
     """
     Close an unmanaged Alpaca position (not tracked in our DB).
@@ -185,9 +194,16 @@ async def close_unmanaged_position(
 
 
 @router.get("/{position_id}", response_model=PositionResponseSchema)
-async def get_position(position_id: str, db: AsyncSession = Depends(get_db)):
+async def get_position(
+    position_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Get a single position by ID."""
-    position = await db.get(Position, position_id)
+    result = await db.execute(
+        select(Position).join(Bot).where(Position.id == position_id, Bot.user_id == user.id)
+    )
+    position = result.scalar_one_or_none()
     if not position:
         raise NotFoundError("Position", position_id)
     return _position_to_response(position)
@@ -197,6 +213,7 @@ async def get_position(position_id: str, db: AsyncSession = Depends(get_db)):
 async def close_position(
     position_id: str,
     pause_bot: bool = Query(True),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -207,7 +224,10 @@ async def close_position(
     4. Create a corresponding sell Trade record
     5. Emit WebSocket events
     """
-    position = await db.get(Position, position_id)
+    result = await db.execute(
+        select(Position).join(Bot).where(Position.id == position_id, Bot.user_id == user.id)
+    )
+    position = result.scalar_one_or_none()
     if not position:
         raise NotFoundError("Position", position_id)
     if not position.is_open:
@@ -294,7 +314,6 @@ async def close_position(
     bot_name = None
     if pause_bot and position.bot_id:
         try:
-            from app.models import Bot
             bot = await db.get(Bot, position.bot_id)
             if bot and bot.status == "running":
                 bot.status = "paused"

@@ -23,7 +23,7 @@ from app.logging_config import configure_logging
 from app.middleware import register_middleware_and_handlers
 from app.routers import account, auth, bots, trades, positions, market_data, settings as settings_router
 from app.websocket_manager import socket_app
-from app.alpaca_client import get_alpaca_client, reinitialize_alpaca_client
+from app.alpaca_client import get_alpaca_client, reinitialize_alpaca_client, set_user_alpaca_client
 from app.database import async_session
 from app.models import AppSettings
 from app.trading_engine import trading_engine
@@ -35,9 +35,9 @@ PAPER_BASE_URL = "https://paper-api.alpaca.markets"
 
 async def _load_db_broker_credentials() -> None:
     """
-    On startup, check if the DB has saved broker credentials and use them
-    to reinitialize the Alpaca client. This ensures credentials saved via
-    the Settings UI survive server restarts.
+    On startup, load all users' broker credentials from the DB and register
+    per-user Alpaca clients. Also initializes the default client from the
+    first available credentials (for backward compatibility).
     """
     try:
         async with async_session() as session:
@@ -45,18 +45,24 @@ async def _load_db_broker_credentials() -> None:
             result = await session.execute(
                 select(AppSettings).where(AppSettings.category == "broker")
             )
-            row = result.scalar_one_or_none()
-            if not row:
+            rows = result.scalars().all()
+            if not rows:
                 return
 
-            data = row.settings or {}
-            api_key = data.get("alpaca_api_key")
-            secret_key = data.get("alpaca_secret_key")
-            base_url = data.get("base_url", PAPER_BASE_URL)
+            default_loaded = False
+            for row in rows:
+                data = row.settings or {}
+                api_key = data.get("alpaca_api_key")
+                secret_key = data.get("alpaca_secret_key")
+                base_url = data.get("base_url", PAPER_BASE_URL)
 
-            if api_key and secret_key:
-                reinitialize_alpaca_client(api_key, secret_key, base_url)
-                logger.info("alpaca_client_loaded_from_db_settings")
+                if api_key and secret_key:
+                    set_user_alpaca_client(row.user_id, api_key, secret_key, base_url)
+                    if not default_loaded:
+                        reinitialize_alpaca_client(api_key, secret_key, base_url)
+                        default_loaded = True
+
+            logger.info("alpaca_clients_loaded_from_db", count=len(rows))
     except Exception as e:
         logger.warning("Failed to load broker credentials from DB: %s", e)
 

@@ -200,7 +200,7 @@ async def test_broker_connection(
         )
 
     try:
-        from app.alpaca_client import AlpacaClient, reinitialize_alpaca_client
+        from app.alpaca_client import AlpacaClient, set_user_alpaca_client
 
         client = AlpacaClient(
             api_key=api_key,
@@ -213,8 +213,8 @@ async def test_broker_connection(
         data["last_verified"] = datetime.now(timezone.utc).isoformat()
         await _upsert_settings(db, user.id, "broker", data)
 
-        reinitialize_alpaca_client(api_key, secret_key, base_url)
-        logger.info("alpaca_client_hot_swapped", user_id=user.id)
+        set_user_alpaca_client(user.id, api_key, secret_key, base_url)
+        logger.info("alpaca_client_registered_for_user", user_id=user.id)
 
         return BrokerTestResponse(
             success=True,
@@ -241,7 +241,7 @@ async def export_trades_csv(
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        select(Trade).order_by(Trade.timestamp.desc())
+        select(Trade).join(Bot).where(Bot.user_id == user.id).order_by(Trade.timestamp.desc())
     )
     trades = result.scalars().all()
 
@@ -278,7 +278,7 @@ async def export_positions_csv(
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        select(Position).order_by(Position.opened_at.desc())
+        select(Position).join(Bot).where(Bot.user_id == user.id).order_by(Position.opened_at.desc())
     )
     positions = result.scalars().all()
 
@@ -315,8 +315,14 @@ async def clear_trade_history(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(delete(Trade))
-    count = result.rowcount
+    user_bot_ids = (
+        await db.execute(select(Bot.id).where(Bot.user_id == user.id))
+    ).scalars().all()
+    if user_bot_ids:
+        result = await db.execute(delete(Trade).where(Trade.bot_id.in_(user_bot_ids)))
+        count = result.rowcount
+    else:
+        count = 0
     logger.info("trade_history_cleared", user_id=user.id, deleted=count)
     return {"message": f"Deleted {count} trades", "deleted": count}
 
@@ -346,12 +352,20 @@ async def get_data_stats(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    bots_count = (await db.execute(select(func.count(Bot.id)))).scalar() or 0
-    trades_count = (await db.execute(select(func.count(Trade.id)))).scalar() or 0
-    positions_count = (await db.execute(select(func.count(Position.id)))).scalar() or 0
-    open_positions = (
-        await db.execute(select(func.count(Position.id)).where(Position.is_open == True))
-    ).scalar() or 0
+    bots_count = (await db.execute(
+        select(func.count(Bot.id)).where(Bot.user_id == user.id)
+    )).scalar() or 0
+    trades_count = (await db.execute(
+        select(func.count(Trade.id)).join(Bot).where(Bot.user_id == user.id)
+    )).scalar() or 0
+    positions_count = (await db.execute(
+        select(func.count(Position.id)).join(Bot).where(Bot.user_id == user.id)
+    )).scalar() or 0
+    open_positions = (await db.execute(
+        select(func.count(Position.id)).join(Bot).where(
+            Position.is_open == True, Bot.user_id == user.id
+        )
+    )).scalar() or 0
 
     return DataStatsResponse(
         total_bots=bots_count,

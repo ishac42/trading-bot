@@ -53,6 +53,9 @@ class User(Base):
     settings: Mapped[list["AppSettings"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    bots: Mapped[list["Bot"]] = relationship(
+        back_populates="owner", cascade="all, delete-orphan"
+    )
 
     __table_args__ = (
         Index("ix_users_google_sub", "google_sub"),
@@ -103,6 +106,9 @@ class Bot(Base):
     id: Mapped[str] = mapped_column(
         String(36), primary_key=True, default=generate_uuid
     )
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="stopped"
@@ -137,6 +143,7 @@ class Bot(Base):
     error_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     # Relationships
+    owner: Mapped["User"] = relationship(back_populates="bots")
     trades: Mapped[list["Trade"]] = relationship(
         back_populates="bot", cascade="all, delete-orphan"
     )
@@ -147,6 +154,7 @@ class Bot(Base):
     # Indexes
     __table_args__ = (
         Index("ix_bots_status", "status"),
+        Index("ix_bots_user_id", "user_id"),
     )
 
     def __repr__(self) -> str:

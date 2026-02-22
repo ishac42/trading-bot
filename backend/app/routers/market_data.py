@@ -15,9 +15,10 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.alpaca_client import get_alpaca_client
+from app.auth import get_current_user
 from app.database import get_db
 from app.exceptions import ExternalServiceError
-from app.models import Bot, Position, Trade
+from app.models import Bot, Position, Trade, User
 from app.schemas import MarketStatusSchema, SummaryStatsSchema
 
 logger = structlog.get_logger(__name__)
@@ -116,64 +117,80 @@ async def get_market_data(symbol: str):
 
 
 @router.get("/summary", response_model=SummaryStatsSchema)
-async def get_summary(db: AsyncSession = Depends(get_db)):
+async def get_summary(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """
-    Compute dashboard summary statistics from the database.
+    Compute dashboard summary statistics scoped to the current user.
     Matches frontend SummaryStats interface / mockSummaryStats shape.
     """
-    # Total P&L from all trades with profit_loss
+    # Total P&L from user's trades with profit_loss
     pnl_result = await db.execute(
         select(func.coalesce(func.sum(Trade.profit_loss), 0.0))
-        .where(Trade.profit_loss.isnot(None))
+        .join(Bot)
+        .where(Trade.profit_loss.isnot(None), Bot.user_id == user.id)
     )
     total_pnl = float(pnl_result.scalar())
 
-    # Bot counts by status
+    # Bot counts by status (user's bots only)
     bot_counts = await db.execute(
-        select(Bot.status, func.count()).group_by(Bot.status)
+        select(Bot.status, func.count())
+        .where(Bot.user_id == user.id)
+        .group_by(Bot.status)
     )
     status_counts = {row[0]: row[1] for row in bot_counts}
     active_bots = status_counts.get("running", 0) + status_counts.get("paused", 0)
     paused_bots = status_counts.get("paused", 0)
     stopped_bots = status_counts.get("stopped", 0)
 
-    # Total capital (for percentage calc)
+    # Total capital (user's bots only)
     capital_result = await db.execute(
         select(func.coalesce(func.sum(Bot.capital), 0.0))
+        .where(Bot.user_id == user.id)
     )
     total_capital = float(capital_result.scalar())
     pnl_percentage = (total_pnl / total_capital * 100) if total_capital > 0 else 0.0
 
-    # Open positions count and value
+    # Open positions count and value (user's positions only)
     open_pos_result = await db.execute(
         select(
             func.count(),
             func.coalesce(func.sum(Position.current_price * Position.quantity), 0.0),
-        ).where(Position.is_open.is_(True))
+        )
+        .join(Bot)
+        .where(Position.is_open.is_(True), Bot.user_id == user.id)
     )
     row = open_pos_result.one()
     open_positions = row[0]
     positions_value = float(row[1])
 
-    # Trades today
+    # Trades today (user's trades only)
     today_start = datetime.now(timezone.utc).replace(
         hour=0, minute=0, second=0, microsecond=0
     )
     today_count_result = await db.execute(
         select(func.count())
         .select_from(Trade)
-        .where(Trade.timestamp >= today_start)
+        .join(Bot)
+        .where(Trade.timestamp >= today_start, Bot.user_id == user.id)
     )
     total_trades_today = today_count_result.scalar() or 0
 
-    # Win rate (from all closed trades)
+    # Win rate (from user's closed trades)
     closed_count_result = await db.execute(
-        select(func.count()).select_from(Trade).where(Trade.profit_loss.isnot(None))
+        select(func.count())
+        .select_from(Trade)
+        .join(Bot)
+        .where(Trade.profit_loss.isnot(None), Bot.user_id == user.id)
     )
     total_closed = closed_count_result.scalar() or 0
 
     winning_count_result = await db.execute(
-        select(func.count()).select_from(Trade).where(Trade.profit_loss > 0)
+        select(func.count())
+        .select_from(Trade)
+        .join(Bot)
+        .where(Trade.profit_loss > 0, Bot.user_id == user.id)
     )
     total_winning = winning_count_result.scalar() or 0
 

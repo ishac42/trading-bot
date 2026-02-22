@@ -19,9 +19,10 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth import get_current_user
 from app.database import get_db
 from app.exceptions import NotFoundError, ConflictError, BadRequestError
-from app.models import Bot, Position, Trade
+from app.models import Bot, Position, Trade, User
 from app.schemas import BotCreateSchema, BotResponseSchema, BotUpdateSchema
 from app.models import utcnow, generate_uuid
 from app.websocket_manager import ws_manager
@@ -34,7 +35,7 @@ router = APIRouter(prefix="/bots", tags=["bots"])
 
 
 async def _validate_capital(
-    db: AsyncSession, requested_capital: float, exclude_bot_id: str | None = None
+    db: AsyncSession, user_id: str, requested_capital: float, exclude_bot_id: str | None = None
 ) -> None:
     """
     Validate that the requested capital doesn't exceed available buying power.
@@ -48,7 +49,7 @@ async def _validate_capital(
     try:
         from app.routers.account import get_allocated_capital
         account = await client.get_account()
-        allocated = await get_allocated_capital(db, exclude_bot_id=exclude_bot_id)
+        allocated = await get_allocated_capital(db, user_id=user_id, exclude_bot_id=exclude_bot_id)
         available = account["buying_power"] - allocated
 
         if requested_capital > available:
@@ -152,10 +153,13 @@ async def _get_bot_metrics(db: AsyncSession, bot_ids: list[str] | None = None):
 
 
 @router.get("", response_model=list[BotResponseSchema])
-async def get_bots(db: AsyncSession = Depends(get_db)):
-    """List all bots, ordered by created_at descending, with realized gains and live metrics."""
+async def get_bots(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List bots owned by the current user, ordered by created_at descending."""
     result = await db.execute(
-        select(Bot).order_by(Bot.created_at.desc())
+        select(Bot).where(Bot.user_id == user.id).order_by(Bot.created_at.desc())
     )
     bots = result.scalars().all()
 
@@ -181,12 +185,17 @@ async def get_bots(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("", response_model=BotResponseSchema, status_code=201)
-async def create_bot(data: BotCreateSchema, db: AsyncSession = Depends(get_db)):
+async def create_bot(
+    data: BotCreateSchema,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Create a new bot with status='stopped' and is_active=false."""
-    await _validate_capital(db, data.capital)
+    await _validate_capital(db, user.id, data.capital)
 
     bot = Bot(
         id=generate_uuid(),
+        user_id=user.id,
         name=data.name,
         status="stopped",
         capital=data.capital,
@@ -208,10 +217,14 @@ async def create_bot(data: BotCreateSchema, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{bot_id}", response_model=BotResponseSchema)
-async def get_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
+async def get_bot(
+    bot_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Get a single bot by ID with realized gains and live metrics."""
     bot = await db.get(Bot, bot_id)
-    if not bot:
+    if not bot or bot.user_id != user.id:
         raise NotFoundError("Bot", bot_id)
     from app.routers.account import get_bot_realized_gains
     gains = await get_bot_realized_gains(db, bot_id)
@@ -225,14 +238,17 @@ async def get_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.put("/{bot_id}", response_model=BotResponseSchema)
 async def update_bot(
-    bot_id: str, data: BotUpdateSchema, db: AsyncSession = Depends(get_db)
+    bot_id: str,
+    data: BotUpdateSchema,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """Update an existing bot's configuration."""
     bot = await db.get(Bot, bot_id)
-    if not bot:
+    if not bot or bot.user_id != user.id:
         raise NotFoundError("Bot", bot_id)
 
-    await _validate_capital(db, data.capital, exclude_bot_id=bot_id)
+    await _validate_capital(db, user.id, data.capital, exclude_bot_id=bot_id)
 
     bot.name = data.name
     bot.capital = data.capital
@@ -252,10 +268,14 @@ async def update_bot(
 
 
 @router.delete("/{bot_id}")
-async def delete_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_bot(
+    bot_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Delete a bot (only if stopped). Cascades to trades and positions."""
     bot = await db.get(Bot, bot_id)
-    if not bot:
+    if not bot or bot.user_id != user.id:
         raise NotFoundError("Bot", bot_id)
     if bot.status == "running":
         raise ConflictError("Cannot delete a running bot. Stop it first.", error_code="BOT_RUNNING")
@@ -264,13 +284,17 @@ async def delete_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{bot_id}/start")
-async def start_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
+async def start_bot(
+    bot_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Start a bot — sets status='running', is_active=true, registers with TradingEngine."""
     bot = await db.get(Bot, bot_id)
-    if not bot:
+    if not bot or bot.user_id != user.id:
         raise NotFoundError("Bot", bot_id)
 
-    await _validate_capital(db, bot.capital, exclude_bot_id=bot_id)
+    await _validate_capital(db, user.id, bot.capital, exclude_bot_id=bot_id)
 
     bot.status = "running"
     bot.is_active = True
@@ -292,10 +316,14 @@ async def start_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{bot_id}/stop")
-async def stop_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
+async def stop_bot(
+    bot_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Stop a bot — sets status='stopped', is_active=false, unregisters from TradingEngine."""
     bot = await db.get(Bot, bot_id)
-    if not bot:
+    if not bot or bot.user_id != user.id:
         raise NotFoundError("Bot", bot_id)
 
     # Unregister bot from the TradingEngine first (cancels trading loop)
@@ -317,10 +345,14 @@ async def stop_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{bot_id}/pause")
-async def pause_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
+async def pause_bot(
+    bot_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Pause a bot — sets status='paused', pauses the trading loop."""
     bot = await db.get(Bot, bot_id)
-    if not bot:
+    if not bot or bot.user_id != user.id:
         raise NotFoundError("Bot", bot_id)
 
     bot.status = "paused"
@@ -341,10 +373,14 @@ async def pause_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{bot_id}/resume")
-async def resume_bot(bot_id: str, db: AsyncSession = Depends(get_db)):
+async def resume_bot(
+    bot_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Resume a paused bot — sets status='running', resumes the trading loop."""
     bot = await db.get(Bot, bot_id)
-    if not bot:
+    if not bot or bot.user_id != user.id:
         raise NotFoundError("Bot", bot_id)
 
     if bot.status != "paused":
