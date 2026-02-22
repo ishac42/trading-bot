@@ -8,6 +8,7 @@ import { useRecentTrades } from '@/hooks/useRecentTrades'
 import { useSummaryStats } from '@/hooks/useSummaryStats'
 import { useRealtimeDashboard } from '@/hooks/useRealtimeDashboard'
 import { useSettings } from '@/hooks/useSettings'
+import { useAccount } from '@/hooks/useAccount'
 
 /**
  * Dashboard Page
@@ -29,6 +30,7 @@ const Dashboard = () => {
   const { data: stats, isLoading: statsLoading, error: statsError } = useSummaryStats()
 
   const { settings, isLoading: settingsLoading } = useSettings()
+  const { data: account, isLoading: accountLoading } = useAccount()
 
   // Real-time updates
   useRealtimeDashboard()
@@ -137,7 +139,7 @@ const Dashboard = () => {
       )}
 
       {/* Link Account Banner */}
-      {!settingsLoading && !settings?.broker?.is_connected && (
+      {!settingsLoading && !accountLoading && !settings?.broker?.is_connected && !account?.account_number && (
         <Alert
           severity="warning"
           sx={{ mb: 2 }}
