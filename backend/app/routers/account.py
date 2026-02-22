@@ -14,8 +14,9 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.alpaca_client import get_alpaca_client
+from app.auth import get_current_user
 from app.database import get_db
-from app.models import Bot, Position, Trade
+from app.models import Bot, Position, Trade, User
 
 logger = structlog.get_logger(__name__)
 
@@ -23,24 +24,29 @@ router = APIRouter(tags=["account"])
 
 
 async def get_allocated_capital(
-    db: AsyncSession, exclude_bot_id: str | None = None
+    db: AsyncSession,
+    user_id: str,
+    exclude_bot_id: str | None = None,
 ) -> float:
     """
-    Sum of capital across all bots. Used to compute available capital.
+    Sum of capital across the given user's bots. Used to compute available capital.
     Optionally exclude a specific bot (for update validation).
     """
-    query = select(func.coalesce(func.sum(Bot.capital), 0.0))
+    query = select(func.coalesce(func.sum(Bot.capital), 0.0)).where(
+        Bot.user_id == user_id
+    )
     if exclude_bot_id:
         query = query.where(Bot.id != exclude_bot_id)
     result = await db.execute(query)
     return float(result.scalar())
 
 
-async def get_total_realized_gains(db: AsyncSession) -> float:
-    """Sum of realized_pnl from all closed positions."""
+async def get_total_realized_gains(db: AsyncSession, user_id: str) -> float:
+    """Sum of realized_pnl from this user's closed positions."""
     result = await db.execute(
         select(func.coalesce(func.sum(Position.realized_pnl), 0.0))
-        .where(Position.is_open.is_(False))
+        .join(Bot)
+        .where(Position.is_open.is_(False), Bot.user_id == user_id)
     )
     return float(result.scalar())
 
@@ -55,19 +61,22 @@ async def get_bot_realized_gains(db: AsyncSession, bot_id: str) -> float:
 
 
 @router.get("/account")
-async def get_account(db: AsyncSession = Depends(get_db)):
+async def get_account(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """
     Get Alpaca account info enriched with capital allocation data.
 
     Returns account-level financials from Alpaca plus:
-    - allocated_capital: sum of all bots' capital
+    - allocated_capital: sum of user's bots' capital
     - available_capital: buying_power - allocated_capital
-    - total_realized_gains: sum of realized P&L from all closed positions
+    - total_realized_gains: sum of realized P&L from user's closed positions
     """
-    allocated = await get_allocated_capital(db)
-    realized = round(await get_total_realized_gains(db), 2)
+    allocated = await get_allocated_capital(db, user_id=user.id)
+    realized = round(await get_total_realized_gains(db, user_id=user.id), 2)
 
-    client = get_alpaca_client()
+    client = get_alpaca_client(user_id=user.id)
     if not client:
         logger.warning("Alpaca client not configured — returning DB-only account info")
         return {
@@ -113,6 +122,7 @@ async def get_account(db: AsyncSession = Depends(get_db)):
 @router.get("/account/reconcile")
 async def reconcile(
     limit: int = Query(100, ge=1, le=500),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -123,7 +133,7 @@ async def reconcile(
       - discrepancies: list of issues found
       - last_checked: ISO timestamp of this check
     """
-    client = get_alpaca_client()
+    client = get_alpaca_client(user_id=user.id)
     if not client:
         return {
             "synced_count": 0,
@@ -164,7 +174,9 @@ async def reconcile(
         conditions.append(Trade.client_order_id.in_(all_client_ids))
 
     if conditions:
-        result = await db.execute(select(Trade).where(or_(*conditions)))
+        result = await db.execute(
+            select(Trade).join(Bot).where(Bot.user_id == user.id, or_(*conditions))
+        )
         db_trades = result.scalars().all()
     else:
         db_trades = []

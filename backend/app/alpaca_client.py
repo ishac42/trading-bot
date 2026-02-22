@@ -505,7 +505,7 @@ class AlpacaClient:
 
 
 # ---------------------------------------------------------------------------
-# Singleton — use get_alpaca_client() to access the current instance
+# Client management — default client + per-user client registry
 # ---------------------------------------------------------------------------
 
 def create_alpaca_client() -> AlpacaClient | None:
@@ -526,33 +526,66 @@ def create_alpaca_client() -> AlpacaClient | None:
         return None
 
 
-# Create on import — mutable; use get_alpaca_client() for live reference
-_alpaca_client: AlpacaClient | None = create_alpaca_client()
+_default_client: AlpacaClient | None = create_alpaca_client()
+
+# Per-user Alpaca clients keyed by user_id.
+# Populated when a user tests/saves broker credentials via the Settings UI.
+_user_clients: dict[str, AlpacaClient] = {}
 
 
-def get_alpaca_client() -> AlpacaClient | None:
-    """Return the current global AlpacaClient singleton."""
-    return _alpaca_client
+def get_alpaca_client(user_id: str | None = None) -> AlpacaClient | None:
+    """
+    Return the Alpaca client for the given user.
+
+    When user_id is provided, returns only that user's registered client
+    (or None if they haven't configured one). This prevents a new user
+    from seeing another user's Alpaca account data.
+
+    When user_id is None, returns the default server-level client.
+    This is used for public market data, the trading engine, and health checks.
+    """
+    if user_id is not None:
+        return _user_clients.get(user_id)
+    return _default_client
+
+
+def set_user_alpaca_client(
+    user_id: str, api_key: str, secret_key: str, base_url: str
+) -> AlpacaClient | None:
+    """
+    Create and register a per-user Alpaca client.
+    Called when a user saves/tests new broker settings via the Settings UI.
+    """
+    try:
+        client = AlpacaClient(
+            api_key=api_key, secret_key=secret_key, base_url=base_url
+        )
+        _user_clients[user_id] = client
+        logger.info("alpaca_client_registered", user_id=user_id)
+        return client
+    except Exception as e:
+        logger.error("Failed to create Alpaca client for user %s: %s", user_id, e)
+        return None
 
 
 def reinitialize_alpaca_client(
     api_key: str, secret_key: str, base_url: str
 ) -> AlpacaClient | None:
     """
-    Replace the global AlpacaClient singleton with new credentials.
-    Called when the user saves/tests new broker settings via the UI.
+    Replace the default AlpacaClient with new credentials.
+    Used during startup to load credentials from DB.
     """
-    global _alpaca_client
+    global _default_client
     try:
-        _alpaca_client = AlpacaClient(
+        _default_client = AlpacaClient(
             api_key=api_key, secret_key=secret_key, base_url=base_url
         )
-        logger.info("Alpaca client reinitialized with new credentials")
-        return _alpaca_client
+        logger.info("Default Alpaca client reinitialized with new credentials")
+        return _default_client
     except Exception as e:
         logger.error("Failed to reinitialize Alpaca client: %s", e)
         return None
 
 
-# Backward compat alias (prefer get_alpaca_client() for hot-swap support)
-alpaca_client = _alpaca_client
+# Backward compat alias
+alpaca_client = _default_client

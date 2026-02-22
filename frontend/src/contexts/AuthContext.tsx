@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import type { ReactNode } from 'react'
 import { api } from '@/services/api'
+import { queryClient } from '@/utils/queryClient'
 import type { User } from '@/types'
 
 interface AuthContextType {
@@ -25,6 +26,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     localStorage.removeItem(TOKEN_KEY)
     setToken(null)
     setUser(null)
+    queryClient.clear()
   }, [])
 
   useEffect(() => {

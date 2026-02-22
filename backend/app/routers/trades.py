@@ -14,9 +14,10 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth import get_current_user
 from app.database import get_db
 from app.exceptions import NotFoundError
-from app.models import Bot, Trade
+from app.models import Bot, Trade, User
 from app.schemas import (
     PaginationSchema,
     PnLByBotSchema,
@@ -109,11 +110,12 @@ async def get_trade_stats(
     botId: str = Query(""),
     symbol: str = Query(""),
     type: str = Query("all"),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Compute trade statistics matching frontend TradeStats interface."""
-    # Build base query
-    query = select(Trade)
+    # Build base query scoped to user's bots
+    query = select(Trade).join(Bot).where(Bot.user_id == user.id)
     query = _apply_date_filter(query, dateRange, customStartDate, customEndDate)
     query = _apply_common_filters(query, botId, symbol, type)
 
@@ -234,11 +236,12 @@ async def get_trades(
     sortDirection: str = Query("desc"),
     page: int = Query(1, ge=1),
     pageSize: int = Query(20, ge=1, le=100000),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """List trades with filtering, sorting, and pagination."""
-    # Base query
-    query = select(Trade)
+    # Base query scoped to user's bots
+    query = select(Trade).join(Bot).where(Bot.user_id == user.id)
     query = _apply_date_filter(query, dateRange, customStartDate, customEndDate)
     query = _apply_common_filters(query, botId, symbol, type)
 
@@ -274,9 +277,16 @@ async def get_trades(
 
 
 @router.get("/{trade_id}", response_model=TradeResponseSchema)
-async def get_trade(trade_id: str, db: AsyncSession = Depends(get_db)):
+async def get_trade(
+    trade_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Get a single trade by ID."""
-    trade = await db.get(Trade, trade_id)
+    result = await db.execute(
+        select(Trade).join(Bot).where(Trade.id == trade_id, Bot.user_id == user.id)
+    )
+    trade = result.scalar_one_or_none()
     if not trade:
         raise NotFoundError("Trade", trade_id)
     return _trade_to_response(trade)

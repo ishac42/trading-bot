@@ -1,11 +1,14 @@
 import { useState, useCallback } from 'react'
-import { Box, Typography, Alert, Snackbar } from '@mui/material'
+import { Box, Typography, Alert, Snackbar, Button } from '@mui/material'
 import { useNavigate } from 'react-router-dom'
+import LinkIcon from '@mui/icons-material/Link'
 import { AccountSummary, SummaryCards, ActiveBotsList, RecentTradesTable } from '@/components/dashboard'
 import { useBots, usePauseBot, useStopBot, useStartBot } from '@/hooks/useBots'
 import { useRecentTrades } from '@/hooks/useRecentTrades'
 import { useSummaryStats } from '@/hooks/useSummaryStats'
 import { useRealtimeDashboard } from '@/hooks/useRealtimeDashboard'
+import { useSettings } from '@/hooks/useSettings'
+import { useAccount } from '@/hooks/useAccount'
 
 /**
  * Dashboard Page
@@ -25,6 +28,9 @@ const Dashboard = () => {
   const { data: bots, isLoading: botsLoading, error: botsError } = useBots()
   const { data: trades, isLoading: tradesLoading, error: tradesError } = useRecentTrades(10)
   const { data: stats, isLoading: statsLoading, error: statsError } = useSummaryStats()
+
+  const { settings, isLoading: settingsLoading } = useSettings()
+  const { data: account, isLoading: accountLoading } = useAccount()
 
   // Real-time updates
   useRealtimeDashboard()
@@ -129,6 +135,26 @@ const Dashboard = () => {
         <Alert severity="error" sx={{ mb: 2 }}>
           Failed to load dashboard data. Please check your connection and try
           again.
+        </Alert>
+      )}
+
+      {/* Link Account Banner */}
+      {!settingsLoading && !accountLoading && !settings?.broker?.is_connected && !account?.account_number && (
+        <Alert
+          severity="warning"
+          sx={{ mb: 2 }}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              startIcon={<LinkIcon />}
+              onClick={() => navigate('/settings')}
+            >
+              Link Account
+            </Button>
+          }
+        >
+          No Alpaca account connected. Link your brokerage account to start trading.
         </Alert>
       )}
 
