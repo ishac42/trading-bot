@@ -76,7 +76,7 @@ async def get_account(
     allocated = await get_allocated_capital(db, user_id=user.id)
     realized = round(await get_total_realized_gains(db, user_id=user.id), 2)
 
-    client = get_alpaca_client()
+    client = get_alpaca_client(user_id=user.id)
     if not client:
         logger.warning("Alpaca client not configured — returning DB-only account info")
         return {
@@ -133,7 +133,7 @@ async def reconcile(
       - discrepancies: list of issues found
       - last_checked: ISO timestamp of this check
     """
-    client = get_alpaca_client()
+    client = get_alpaca_client(user_id=user.id)
     if not client:
         return {
             "synced_count": 0,

@@ -99,7 +99,7 @@ async def get_unmanaged_positions(
     Compares Alpaca's actual positions (per symbol) against the sum of
     our open DB positions per symbol. Any excess quantity is "unmanaged."
     """
-    client = get_alpaca_client()
+    client = get_alpaca_client(user_id=user.id)
     if not client:
         return []
 
@@ -158,7 +158,7 @@ async def close_unmanaged_position(
     Close an unmanaged Alpaca position (not tracked in our DB).
     Sells the given quantity of the symbol at market price directly via Alpaca.
     """
-    client = get_alpaca_client()
+    client = get_alpaca_client(user_id=user.id)
     if not client:
         raise ExternalServiceError("Alpaca", "Alpaca client not configured")
 
@@ -238,7 +238,7 @@ async def close_position(
     sell_price = position.current_price
     coid = generate_client_order_id(position.bot_id)
 
-    client = get_alpaca_client()
+    client = get_alpaca_client(user_id=user.id)
     if client:
         try:
             order_result = await client.submit_market_order(

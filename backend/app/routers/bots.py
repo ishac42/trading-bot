@@ -42,7 +42,7 @@ async def _validate_capital(
     Raises BadRequestError if validation fails.
     Silently passes if Alpaca is not configured (allows dev/testing without Alpaca).
     """
-    client = get_alpaca_client()
+    client = get_alpaca_client(user_id=user_id)
     if not client:
         return
 

@@ -535,14 +535,17 @@ _user_clients: dict[str, AlpacaClient] = {}
 
 def get_alpaca_client(user_id: str | None = None) -> AlpacaClient | None:
     """
-    Return the Alpaca client for the given user, falling back to the default.
+    Return the Alpaca client for the given user.
 
-    Priority:
-      1. Per-user client (if user_id provided and client exists)
-      2. Default client (from env vars)
+    When user_id is provided, returns only that user's registered client
+    (or None if they haven't configured one). This prevents a new user
+    from seeing another user's Alpaca account data.
+
+    When user_id is None, returns the default server-level client.
+    This is used for public market data, the trading engine, and health checks.
     """
-    if user_id and user_id in _user_clients:
-        return _user_clients[user_id]
+    if user_id is not None:
+        return _user_clients.get(user_id)
     return _default_client
 
 
