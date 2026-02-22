@@ -1,14 +1,10 @@
-import React, { useState } from 'react'
+import React from 'react'
 import {
   Box,
   Typography,
   Skeleton,
   Chip,
   LinearProgress,
-  Button,
-  CircularProgress,
-  Alert,
-  Collapse,
 } from '@mui/material'
 import Grid from '@mui/material/Grid'
 import {
@@ -17,12 +13,10 @@ import {
   ShoppingCart as BuyingPowerIcon,
   TrendingUp as GainsIcon,
   PieChart as AllocationIcon,
-  Sync as SyncIcon,
 } from '@mui/icons-material'
 import { Card } from '@/components/common'
 import { useAccount } from '@/hooks/useAccount'
 import { formatCurrency } from '@/utils/formatters'
-import { api } from '@/services/api'
 
 interface MetricCardProps {
   label: string
@@ -75,39 +69,8 @@ const MetricCard: React.FC<MetricCardProps> = ({
   </Card>
 )
 
-interface ReconcileResult {
-  synced_count: number
-  discrepancies: Array<{
-    type: string
-    detail: string
-    trade_id?: string
-    order_id?: string
-    symbol?: string
-  }>
-  last_checked: string
-  error?: string
-}
-
 export const AccountSummary: React.FC = () => {
   const { data: account, isLoading } = useAccount()
-  const [reconciling, setReconciling] = useState(false)
-  const [reconcileResult, setReconcileResult] = useState<ReconcileResult | null>(null)
-
-  const handleReconcile = async () => {
-    setReconciling(true)
-    try {
-      const response = await api.reconcile()
-      setReconcileResult(response.data)
-    } catch {
-      setReconcileResult({
-        synced_count: 0,
-        discrepancies: [{ type: 'error', detail: 'Failed to run reconciliation' }],
-        last_checked: new Date().toISOString(),
-      })
-    } finally {
-      setReconciling(false)
-    }
-  }
 
   if (isLoading) {
     return (
@@ -236,43 +199,6 @@ export const AccountSummary: React.FC = () => {
           </Card>
         </Grid>
       </Grid>
-
-      {/* Reconciliation */}
-      <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
-        <Button
-          size="small"
-          variant="outlined"
-          startIcon={reconciling ? <CircularProgress size={14} /> : <SyncIcon />}
-          onClick={handleReconcile}
-          disabled={reconciling}
-          sx={{ textTransform: 'none' }}
-        >
-          Check Sync
-        </Button>
-        {reconcileResult && !reconciling && (
-          <Typography variant="body2" color="text.secondary">
-            {reconcileResult.synced_count} synced
-            {reconcileResult.discrepancies.length > 0
-              ? `, ${reconcileResult.discrepancies.length} issue${reconcileResult.discrepancies.length > 1 ? 's' : ''}`
-              : ' — all good'}
-          </Typography>
-        )}
-      </Box>
-
-      <Collapse in={!!reconcileResult && reconcileResult.discrepancies.length > 0}>
-        <Box sx={{ mt: 1.5 }}>
-          {reconcileResult?.discrepancies.map((d, i) => (
-            <Alert
-              key={i}
-              severity={d.type === 'error' || d.type === 'fetch_error' ? 'error' : 'warning'}
-              sx={{ mb: 0.5, py: 0, '& .MuiAlert-message': { fontSize: '0.8rem' } }}
-            >
-              <strong>{d.type}</strong>
-              {d.symbol && ` (${d.symbol})`}: {d.detail}
-            </Alert>
-          ))}
-        </Box>
-      </Collapse>
     </Box>
   )
 }
