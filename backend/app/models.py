@@ -286,3 +286,44 @@ class Position(Base):
 
     def __repr__(self) -> str:
         return f"<Position(id={self.id!r}, symbol={self.symbol!r}, is_open={self.is_open!r})>"
+
+
+# =============================================================================
+# ActivityLog Table — persistent activity/audit log
+# =============================================================================
+
+class ActivityLog(Base):
+    __tablename__ = "activity_logs"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=generate_uuid
+    )
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    level: Mapped[str] = mapped_column(
+        String(10), nullable=False
+    )  # 'debug' | 'info' | 'warning' | 'error'
+    category: Mapped[str] = mapped_column(
+        String(30), nullable=False
+    )  # 'trade' | 'bot' | 'auth' | 'system' | 'risk' | 'error'
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    details: Mapped[dict | None] = mapped_column(JSON, nullable=True, default=None)
+
+    bot_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("bots.id", ondelete="SET NULL"), nullable=True, default=None
+    )
+    user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, default=None
+    )
+
+    __table_args__ = (
+        Index("ix_activity_logs_timestamp", "timestamp"),
+        Index("ix_activity_logs_level", "level"),
+        Index("ix_activity_logs_category", "category"),
+        Index("ix_activity_logs_bot_id", "bot_id"),
+        Index("ix_activity_logs_user_id", "user_id"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<ActivityLog(id={self.id!r}, level={self.level!r}, category={self.category!r})>"

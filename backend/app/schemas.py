@@ -131,6 +131,7 @@ class BotResponseSchema(BaseModel):
     trades_today: int = 0
     win_rate: float = 0.0
     today_pnl: float = 0.0
+    total_pnl: float = 0.0
 
 
 # =============================================================================
@@ -160,6 +161,7 @@ class TradeResponseSchema(BaseModel):
         "new", "done_for_day", "expired", "replaced",
         "stopped", "rejected", "suspended", "calculated",
     ]
+    profit_loss_pct: float | None = None
     commission: float | None = None
     slippage: float | None = None
     client_order_id: str | None = None
@@ -447,3 +449,27 @@ class DataStatsResponse(BaseModel):
     total_trades: int
     total_positions: int
     open_positions: int
+
+
+# =============================================================================
+# Activity Log Schemas
+# =============================================================================
+
+class ActivityLogResponseSchema(BaseModel):
+    """Response schema for a single activity log entry."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    timestamp: str
+    level: str
+    category: str
+    message: str
+    details: dict[str, Any] | None = None
+    bot_id: str | None = None
+    user_id: str | None = None
+
+
+class ActivityLogListResponseSchema(BaseModel):
+    """Paginated activity log response."""
+    logs: list[ActivityLogResponseSchema]
+    pagination: PaginationSchema

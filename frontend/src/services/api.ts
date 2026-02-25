@@ -118,4 +118,8 @@ export const api = {
   clearTradeHistory: () => apiClient.delete('/settings/trades'),
   resetAllSettings: () => apiClient.post('/settings/reset'),
   getDataStats: () => apiClient.get('/settings/data-stats'),
+
+  // Activity Logs
+  getActivityLogs: (params?: any) => apiClient.get('/activity-logs', { params }),
+  getActivityLogLevels: () => apiClient.get('/activity-logs/levels'),
 }

@@ -7,6 +7,7 @@ import NotificationSettings from '@/components/settings/NotificationSettings'
 import DisplayPreferences from '@/components/settings/DisplayPreferences'
 import AppearanceSettings from '@/components/settings/AppearanceSettings'
 import DataManagement from '@/components/settings/DataManagement'
+import ActivityLogPanel from '@/components/settings/ActivityLogPanel'
 import { useSettings } from '@/hooks/useSettings'
 
 const Settings = () => {
@@ -72,6 +73,8 @@ const Settings = () => {
             resetSettings={resetSettings}
           />
         )
+      case 'activity':
+        return <ActivityLogPanel />
     }
   }
 

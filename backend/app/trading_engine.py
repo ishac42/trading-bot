@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import uuid as _uuid
 
+from app.activity_logger import activity_logger
 from app.alpaca_client import get_alpaca_client, AlpacaClient
 from app.database import async_session
 from app.models import Bot, Trade, Position, generate_uuid, utcnow
@@ -83,6 +84,10 @@ class BotRunner:
         self._consecutive_errors = 0
         self._task = asyncio.create_task(self._trading_loop(), name=f"bot-{self.bot_id[:8]}")
         logger.info("BotRunner started: %s (%s)", self.config.get("name", "?"), self.bot_id[:8])
+        await activity_logger.bot_event(
+            f"Bot '{self.config.get('name', '?')}' started",
+            bot_id=self.bot_id,
+        )
 
     async def stop(self) -> None:
         """Cancel the trading loop task."""
@@ -95,16 +100,28 @@ class BotRunner:
                 pass
         self._task = None
         logger.info("BotRunner stopped: %s (%s)", self.config.get("name", "?"), self.bot_id[:8])
+        await activity_logger.bot_event(
+            f"Bot '{self.config.get('name', '?')}' stopped",
+            bot_id=self.bot_id,
+        )
 
     def pause(self) -> None:
         """Pause the bot — loop keeps running but skips trading."""
         self.is_paused = True
         logger.info("BotRunner paused: %s (%s)", self.config.get("name", "?"), self.bot_id[:8])
+        asyncio.create_task(activity_logger.bot_event(
+            f"Bot '{self.config.get('name', '?')}' paused",
+            bot_id=self.bot_id,
+        ))
 
     def resume(self) -> None:
         """Resume a paused bot."""
         self.is_paused = False
         logger.info("BotRunner resumed: %s (%s)", self.config.get("name", "?"), self.bot_id[:8])
+        asyncio.create_task(activity_logger.bot_event(
+            f"Bot '{self.config.get('name', '?')}' resumed",
+            bot_id=self.bot_id,
+        ))
 
     # -------------------------------------------------------------------
     # Trading Loop
@@ -168,6 +185,10 @@ class BotRunner:
                 logger.error(
                     "Error in trading loop for '%s' (attempt %d/%d): %s",
                     bot_name, self._consecutive_errors, MAX_ERROR_COUNT, e,
+                )
+                await activity_logger.error_event(
+                    f"Trading loop error for '{bot_name}' (attempt {self._consecutive_errors}/{MAX_ERROR_COUNT}): {e}",
+                    bot_id=self.bot_id,
                 )
                 if self._consecutive_errors >= MAX_ERROR_COUNT:
                     await self._auto_stop_on_error(str(e))
@@ -273,6 +294,12 @@ class BotRunner:
                 )
                 if not allowed:
                     logger.info("Risk blocked BUY for %s: %s", symbol, block_reason)
+                    await activity_logger.risk_event(
+                        f"Risk blocked BUY for {symbol}: {block_reason}",
+                        bot_id=self.bot_id,
+                        symbol=symbol,
+                        reason=block_reason,
+                    )
                     return
 
                 # Execute buy and tag position with entry_indicator
@@ -413,9 +440,23 @@ class BotRunner:
                 symbol, filled_qty, filled_price, entry_indicator,
                 order_result["id"][:8], self.bot_id[:8],
             )
+            await activity_logger.trade(
+                f"BUY {symbol} x{filled_qty} @ ${filled_price:.2f}",
+                bot_id=self.bot_id,
+                symbol=symbol,
+                quantity=filled_qty,
+                price=filled_price,
+                reason=reason,
+                order_id=order_result["id"],
+            )
 
         except Exception as e:
             logger.error("Failed to execute BUY for %s: %s", symbol, e)
+            await activity_logger.error_event(
+                f"Failed to execute BUY for {symbol}: {e}",
+                bot_id=self.bot_id,
+                symbol=symbol,
+            )
 
     async def _execute_sell(
         self,
@@ -538,9 +579,24 @@ class BotRunner:
                     symbol, position.quantity, filled_price, profit_loss,
                     order_result["id"][:8], self.bot_id[:8],
                 )
+                await activity_logger.trade(
+                    f"SELL {symbol} x{position.quantity} @ ${filled_price:.2f} — P&L: ${profit_loss:+.2f}",
+                    bot_id=self.bot_id,
+                    symbol=symbol,
+                    quantity=position.quantity,
+                    price=filled_price,
+                    profit_loss=profit_loss,
+                    reason=reason,
+                    order_id=order_result["id"],
+                )
 
             except Exception as e:
                 logger.error("Failed to execute SELL for %s: %s", symbol, e)
+                await activity_logger.error_event(
+                    f"Failed to execute SELL for {symbol}: {e}",
+                    bot_id=self.bot_id,
+                    symbol=symbol,
+                )
 
     async def _get_open_position(self, symbol: str) -> Position | None:
         """Fetch the open position for this bot+symbol, if any."""
@@ -598,6 +654,12 @@ class BotRunner:
                         logger.info(
                             "SL/TP triggered for %s: %s (bot=%s)",
                             pos.symbol, sell_reason, self.bot_id[:8],
+                        )
+                        await activity_logger.trade(
+                            f"SL/TP triggered for {pos.symbol}: {sell_reason}",
+                            bot_id=self.bot_id,
+                            symbol=pos.symbol,
+                            reason=sell_reason,
                         )
                         await self._execute_sell(
                             pos.symbol, current_price,
@@ -704,6 +766,10 @@ class BotRunner:
         logger.error(
             "Bot %s exceeded max errors (%d), auto-stopping. Last error: %s",
             self.bot_id[:8], MAX_ERROR_COUNT, error_msg,
+        )
+        await activity_logger.error_event(
+            f"Bot '{self.config.get('name', '?')}' auto-stopped after {MAX_ERROR_COUNT} consecutive errors: {error_msg}",
+            bot_id=self.bot_id,
         )
         self.is_running = False
         try:

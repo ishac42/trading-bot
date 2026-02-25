@@ -227,10 +227,24 @@ export const BotCard: React.FC<BotCardProps> = ({
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
           <Typography variant="body2" color="text.secondary">
-            P&L:
+            Today:
           </Typography>
           <PnLDisplay
             amount={bot.today_pnl}
+            showSign
+            size="small"
+            bold
+          />
+        </Box>
+
+        <Divider orientation="vertical" flexItem />
+
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <Typography variant="body2" color="text.secondary">
+            Total P&L:
+          </Typography>
+          <PnLDisplay
+            amount={bot.total_pnl}
             showSign
             size="small"
             bold
