@@ -2,6 +2,7 @@ import { useState } from 'react'
 import {
   Box,
   Typography,
+  Link,
   TextField,
   Button,
   Alert,
@@ -63,6 +64,13 @@ const BrokerConnection = ({ broker, updateBroker, testBroker }: BrokerConnection
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
         Configure your Alpaca brokerage API credentials. These are stored
         securely and used to execute trades and fetch account data.
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+        Go to{' '}
+        <Link href="https://app.alpaca.markets/" target="_blank" rel="noopener noreferrer">
+          Alpaca
+        </Link>{' '}
+        wesbiste to create an account and link here.
       </Typography>
 
       {/* Connection Status */}
