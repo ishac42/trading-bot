@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import uuid as _uuid
 
+from app.activity_logger import activity_logger
 from app.alpaca_client import get_alpaca_client, AlpacaClient
 from app.database import async_session
 from app.models import Bot, Trade, Position, generate_uuid, utcnow
