@@ -36,8 +36,8 @@ PAPER_BASE_URL = "https://paper-api.alpaca.markets"
 async def _load_db_broker_credentials() -> None:
     """
     On startup, load all users' broker credentials from the DB and register
-    per-user Alpaca clients. Also initializes the default client from the
-    first available credentials (for backward compatibility).
+    per-user Alpaca clients. The default client is initialized for market-data
+    operations only (clock, bars); all trading goes through per-user clients.
     """
     try:
         async with async_session() as session:
@@ -49,7 +49,7 @@ async def _load_db_broker_credentials() -> None:
             if not rows:
                 return
 
-            default_loaded = False
+            market_data_client_loaded = False
             for row in rows:
                 data = row.settings or {}
                 api_key = data.get("alpaca_api_key")
@@ -58,9 +58,9 @@ async def _load_db_broker_credentials() -> None:
 
                 if api_key and secret_key:
                     set_user_alpaca_client(row.user_id, api_key, secret_key, base_url)
-                    if not default_loaded:
+                    if not market_data_client_loaded:
                         reinitialize_alpaca_client(api_key, secret_key, base_url)
-                        default_loaded = True
+                        market_data_client_loaded = True
 
             logger.info("alpaca_clients_loaded_from_db", count=len(rows))
     except Exception as e:

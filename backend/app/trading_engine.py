@@ -35,6 +35,7 @@ from app.models import Bot, Trade, Position, generate_uuid, utcnow
 from app.websocket_manager import ws_manager
 from app.indicators import indicator_calculator
 from app.signal_generator import signal_generator, Signal
+from app.reconciler import reconciler
 from app.risk_manager import risk_manager
 
 
@@ -51,6 +52,7 @@ logger = structlog.get_logger(__name__)
 
 MAX_ERROR_COUNT = 5  # Auto-stop bot after this many consecutive errors
 MARKET_MONITOR_INTERVAL = 60  # Seconds between market clock checks
+RECONCILIATION_INTERVAL = 300  # Seconds between reconciliation runs
 ET_OFFSET = timedelta(hours=-5)  # EST offset from UTC (simplified; real ET is -5/-4)
 
 
@@ -64,14 +66,19 @@ class BotRunner:
     Created by TradingEngine.register_bot(), destroyed by unregister_bot().
     """
 
-    def __init__(self, bot_id: str, bot_config: dict[str, Any], engine: TradingEngine) -> None:
+    def __init__(self, bot_id: str, user_id: str, bot_config: dict[str, Any], engine: TradingEngine) -> None:
         self.bot_id = bot_id
+        self.user_id = user_id
         self.config = bot_config
         self.engine = engine
         self.is_running = False
         self.is_paused = False
         self._task: asyncio.Task | None = None
         self._consecutive_errors = 0
+
+    def _get_client(self) -> AlpacaClient | None:
+        """Return the Alpaca client scoped to this bot's owner."""
+        return get_alpaca_client(user_id=self.user_id)
 
     async def start(self) -> None:
         """Launch the trading loop as a background task."""
@@ -181,7 +188,7 @@ class BotRunner:
           Phase 2 — BUY CHECK:  If no open position, check all indicators
                     for a BUY signal. First one wins.
         """
-        client = get_alpaca_client()
+        client = self._get_client()
         if not client:
             return
 
@@ -293,10 +300,11 @@ class BotRunner:
         entry_indicator: str = "",
     ) -> None:
         """
-        Execute a BUY: calculate size -> submit order -> record in DB -> emit WS events.
-        Tags the new position with the entry_indicator that triggered the buy.
+        Execute a BUY: submit order -> immediately record in DB (prevents
+        duplicate buys on subsequent cycles) -> wait for fill -> update
+        records with actual fill data.
         """
-        client = get_alpaca_client()
+        client = self._get_client()
         if not client:
             return
 
@@ -316,59 +324,40 @@ class BotRunner:
                 client_order_id=coid,
             )
 
-            # Wait for fill with retries
-            order_status = await self._wait_for_fill(order_result["id"])
-            status = order_status.get("status", "pending")
-
-            if status in ("canceled", "cancelled", "expired", "rejected"):
-                logger.warning(
-                    "BUY order for %s was %s, skipping position creation",
-                    symbol, status,
-                )
-                return
-
-            filled_price = order_status.get("filled_avg_price")
-            filled_qty = int(order_status.get("filled_qty", 0)) or qty
-
-            if not filled_price:
-                logger.error(
-                    "BUY order %s has no filled_avg_price (status=%s). "
-                    "Skipping position creation to avoid corrupted entry price.",
-                    order_result["id"][:8], status,
-                )
-                return
-
-            # Calculate stop-loss and take-profit
-            stop_loss = risk_manager.calculate_stop_loss(filled_price, risk_config)
-            take_profit = risk_manager.calculate_take_profit(filled_price, risk_config)
-
+            # Record trade + position IMMEDIATELY so the next trading cycle
+            # sees an open position and won't submit duplicate buy orders.
+            stop_loss = risk_manager.calculate_stop_loss(current_price, risk_config)
+            take_profit = risk_manager.calculate_take_profit(current_price, risk_config)
             reason = f"{entry_indicator} buy signal" if entry_indicator else "Buy signal"
+
+            trade_id = generate_uuid()
+            position_id = generate_uuid()
+            now = utcnow()
 
             async with async_session() as session:
                 trade = Trade(
-                    id=generate_uuid(),
+                    id=trade_id,
                     bot_id=self.bot_id,
                     symbol=symbol,
                     type="buy",
-                    quantity=filled_qty,
-                    price=filled_price,
-                    timestamp=utcnow(),
+                    quantity=qty,
+                    price=current_price,
+                    timestamp=now,
                     indicators_snapshot=indicators_snapshot,
                     order_id=order_result["id"],
-                    status="filled" if status == "filled" else status,
+                    status="new",
                     client_order_id=coid,
                     reason=reason,
                 )
                 session.add(trade)
 
-                # Create position record — tagged with entry_indicator
                 position = Position(
-                    id=generate_uuid(),
+                    id=position_id,
                     bot_id=self.bot_id,
                     symbol=symbol,
-                    quantity=filled_qty,
-                    entry_price=filled_price,
-                    current_price=filled_price,
+                    quantity=qty,
+                    entry_price=current_price,
+                    current_price=current_price,
                     stop_loss_price=stop_loss,
                     take_profit_price=take_profit,
                     unrealized_pnl=0.0,
@@ -379,40 +368,120 @@ class BotRunner:
                 session.add(position)
                 await session.commit()
 
-                # Emit WebSocket events
-                await ws_manager.emit_trade_executed({
-                    "id": trade.id,
-                    "bot_id": trade.bot_id,
-                    "symbol": trade.symbol,
-                    "type": trade.type,
-                    "quantity": trade.quantity,
-                    "price": trade.price,
-                    "timestamp": trade.timestamp.isoformat(),
-                    "profit_loss": trade.profit_loss,
-                    "status": trade.status,
-                    "order_id": trade.order_id,
-                })
-                await ws_manager.emit_position_updated({
-                    "id": position.id,
-                    "bot_id": position.bot_id,
-                    "symbol": position.symbol,
-                    "quantity": position.quantity,
-                    "entry_price": position.entry_price,
-                    "current_price": position.current_price,
-                    "stop_loss_price": position.stop_loss_price,
-                    "take_profit_price": position.take_profit_price,
-                    "unrealized_pnl": position.unrealized_pnl,
-                    "realized_pnl": position.realized_pnl,
-                    "opened_at": position.opened_at.isoformat(),
-                    "is_open": position.is_open,
-                    "entry_indicator": position.entry_indicator,
-                })
+            logger.info(
+                "BUY order submitted & pending records created: %s x%d (order=%s, bot=%s)",
+                symbol, qty, order_result["id"][:8], self.bot_id[:8],
+            )
 
+            # Now wait for the fill and update records with actual data
+            order_status = await self._wait_for_fill(order_result["id"])
+            status = order_status.get("status", "pending")
+
+            if status in ("canceled", "cancelled", "expired", "rejected"):
+                async with async_session() as session:
+                    db_trade = await session.get(Trade, trade_id)
+                    db_pos = await session.get(Position, position_id)
+                    if db_trade:
+                        db_trade.status = status
+                    if db_pos:
+                        db_pos.is_open = False
+                        db_pos.closed_at = utcnow()
+                    await session.commit()
+                logger.warning(
+                    "BUY order for %s was %s, cleaned up pending records",
+                    symbol, status,
+                )
+                return
+
+            filled_price = order_status.get("filled_avg_price")
+            filled_qty = int(order_status.get("filled_qty", 0)) or qty
+
+            if filled_price is not None:
+                filled_price = float(filled_price)
+
+            # Update records with actual fill data
+            async with async_session() as session:
+                db_trade = await session.get(Trade, trade_id)
+                db_pos = await session.get(Position, position_id)
+
+                if db_trade:
+                    db_trade.status = "filled" if status == "filled" else status
+                    db_trade.quantity = filled_qty
+                    if filled_price:
+                        db_trade.price = filled_price
+
+                if db_pos:
+                    db_pos.quantity = filled_qty
+                    if filled_price:
+                        db_pos.entry_price = filled_price
+                        db_pos.current_price = filled_price
+                        db_pos.stop_loss_price = risk_manager.calculate_stop_loss(
+                            filled_price, risk_config
+                        )
+                        db_pos.take_profit_price = risk_manager.calculate_take_profit(
+                            filled_price, risk_config
+                        )
+
+                await session.commit()
+
+                if db_trade:
+                    await session.refresh(db_trade)
+                if db_pos:
+                    await session.refresh(db_pos)
+
+                # Emit WebSocket events
+                if db_trade:
+                    await ws_manager.emit_trade_executed({
+                        "id": db_trade.id,
+                        "bot_id": db_trade.bot_id,
+                        "symbol": db_trade.symbol,
+                        "type": db_trade.type,
+                        "quantity": db_trade.quantity,
+                        "price": db_trade.price,
+                        "timestamp": db_trade.timestamp.isoformat(),
+                        "profit_loss": db_trade.profit_loss,
+                        "status": db_trade.status,
+                        "order_id": db_trade.order_id,
+                    })
+                if db_pos:
+                    await ws_manager.emit_position_updated({
+                        "id": db_pos.id,
+                        "bot_id": db_pos.bot_id,
+                        "symbol": db_pos.symbol,
+                        "quantity": db_pos.quantity,
+                        "entry_price": db_pos.entry_price,
+                        "current_price": db_pos.current_price,
+                        "stop_loss_price": db_pos.stop_loss_price,
+                        "take_profit_price": db_pos.take_profit_price,
+                        "unrealized_pnl": db_pos.unrealized_pnl,
+                        "realized_pnl": db_pos.realized_pnl,
+                        "opened_at": db_pos.opened_at.isoformat(),
+                        "is_open": db_pos.is_open,
+                        "entry_indicator": db_pos.entry_indicator,
+                    })
+
+            final_price = filled_price or current_price
             logger.info(
                 "BUY executed: %s x%d @ %.2f via %s (order=%s, bot=%s)",
-                symbol, filled_qty, filled_price, entry_indicator,
+                symbol, filled_qty, final_price, entry_indicator,
                 order_result["id"][:8], self.bot_id[:8],
             )
+            await activity_logger.trade(
+                f"BUY {symbol} x{filled_qty} @ ${final_price:.2f}",
+                bot_id=self.bot_id,
+                symbol=symbol,
+                quantity=filled_qty,
+                price=final_price,
+                reason=reason,
+                order_id=order_result["id"],
+            )
+
+            if not filled_price:
+                logger.warning(
+                    "BUY order %s fill not confirmed after timeout (status=%s). "
+                    "Position recorded with preliminary price %.2f to prevent re-buys.",
+                    order_result["id"][:8], status, current_price,
+                )
 
         except Exception as e:
             logger.error("Failed to execute BUY for %s: %s", symbol, e)
@@ -425,7 +494,7 @@ class BotRunner:
         reason: str = "Sell signal",
     ) -> None:
         """Close the open position for this symbol if one exists."""
-        client = get_alpaca_client()
+        client = self._get_client()
         if not client:
             return
 
@@ -563,7 +632,7 @@ class BotRunner:
         Check all open positions for this bot against their SL/TP levels.
         Auto-sell any position where current price has breached the threshold.
         """
-        client = get_alpaca_client()
+        client = self._get_client()
         if not client:
             return
 
@@ -645,12 +714,12 @@ class BotRunner:
 
         return start_minutes <= current_minutes <= end_minutes
 
-    async def _wait_for_fill(self, order_id: str, max_attempts: int = 10) -> dict[str, Any]:
+    async def _wait_for_fill(self, order_id: str, max_attempts: int = 30) -> dict[str, Any]:
         """
-        Wait for an order to fill, retrying up to max_attempts times.
+        Wait for an order to fill, polling every 1s up to max_attempts times.
         Returns the order status dict.
         """
-        client = get_alpaca_client()
+        client = self._get_client()
         order_status: dict[str, Any] = {}
         for attempt in range(max_attempts):
             await asyncio.sleep(1)
@@ -747,6 +816,7 @@ class TradingEngine:
         self.bots: dict[str, BotRunner] = {}
         self.market_is_open: bool = False
         self._market_monitor_task: asyncio.Task | None = None
+        self._reconciliation_task: asyncio.Task | None = None
         self._running = False
         logger.info("TradingEngine created")
 
@@ -773,6 +843,17 @@ class TradingEngine:
         # Load and register running bots
         await self._load_running_bots()
 
+        # Startup reconciliation — catch drift that occurred while the app was down
+        try:
+            await reconciler.full_reconciliation()
+        except Exception as e:
+            logger.error("Startup reconciliation failed: %s", e)
+
+        # Background reconciliation loop
+        self._reconciliation_task = asyncio.create_task(
+            self._reconciliation_loop(), name="reconciler"
+        )
+
         logger.info(
             "TradingEngine started (market_open=%s, bots=%d)",
             self.market_is_open, len(self.bots),
@@ -794,6 +875,15 @@ class TradingEngine:
             except asyncio.CancelledError:
                 pass
         self._market_monitor_task = None
+
+        # Cancel reconciliation loop
+        if self._reconciliation_task and not self._reconciliation_task.done():
+            self._reconciliation_task.cancel()
+            try:
+                await self._reconciliation_task
+            except asyncio.CancelledError:
+                pass
+        self._reconciliation_task = None
 
         logger.info("TradingEngine stopped")
 
@@ -830,13 +920,21 @@ class TradingEngine:
                     "end_minute": bot.end_minute,
                 }
 
-            runner = BotRunner(bot_id, config, self)
+            client = get_alpaca_client(user_id=bot.user_id)
+            if not client:
+                logger.warning(
+                    "Bot %s (user=%s) has no Alpaca client configured, skipping",
+                    bot_id[:8], bot.user_id[:8],
+                )
+                return
+
+            runner = BotRunner(bot_id, bot.user_id, config, self)
             self.bots[bot_id] = runner
             await runner.start()
 
             logger.info(
-                "Registered bot '%s' (%s) with %d symbols",
-                config["name"], bot_id[:8], len(config["symbols"]),
+                "Registered bot '%s' (%s) with %d symbols for user %s",
+                config["name"], bot_id[:8], len(config["symbols"]), bot.user_id[:8],
             )
 
         except Exception as e:
@@ -906,6 +1004,22 @@ class TradingEngine:
             except Exception as e:
                 logger.error("Error in market monitor loop: %s", e)
                 await asyncio.sleep(10)  # Brief back-off on error
+
+    async def _reconciliation_loop(self) -> None:
+        """Run full_reconciliation every RECONCILIATION_INTERVAL seconds."""
+        logger.info("Reconciliation loop started (interval=%ds)", RECONCILIATION_INTERVAL)
+        while self._running:
+            try:
+                await asyncio.sleep(RECONCILIATION_INTERVAL)
+                if not self._running:
+                    break
+                await reconciler.full_reconciliation()
+            except asyncio.CancelledError:
+                logger.info("Reconciliation loop cancelled")
+                raise
+            except Exception as e:
+                logger.error("Reconciliation error: %s", e)
+                await asyncio.sleep(10)
 
     async def _update_market_status(self) -> None:
         """Fetch current market status from Alpaca."""
