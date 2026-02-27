@@ -319,12 +319,28 @@ async def clear_trade_history(
         await db.execute(select(Bot.id).where(Bot.user_id == user.id))
     ).scalars().all()
     if user_bot_ids:
-        result = await db.execute(delete(Trade).where(Trade.bot_id.in_(user_bot_ids)))
-        count = result.rowcount
+        trades_result = await db.execute(
+            delete(Trade).where(Trade.bot_id.in_(user_bot_ids))
+        )
+        positions_result = await db.execute(
+            delete(Position).where(Position.bot_id.in_(user_bot_ids))
+        )
+        trade_count = trades_result.rowcount
+        position_count = positions_result.rowcount
     else:
-        count = 0
-    logger.info("trade_history_cleared", user_id=user.id, deleted=count)
-    return {"message": f"Deleted {count} trades", "deleted": count}
+        trade_count = 0
+        position_count = 0
+    logger.info(
+        "trade_history_cleared",
+        user_id=user.id,
+        trades_deleted=trade_count,
+        positions_deleted=position_count,
+    )
+    return {
+        "message": f"Deleted {trade_count} trades and {position_count} positions",
+        "deleted": trade_count,
+        "positions_deleted": position_count,
+    }
 
 
 # ---------------------------------------------------------------------------
