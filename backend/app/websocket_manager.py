@@ -83,6 +83,10 @@ class WebSocketManager:
         """Broadcast a market status change (open/close) to all clients."""
         await sio.emit("market_status_changed", status)
 
+    async def emit_reconciliation_alert(self, data: dict) -> None:
+        """Broadcast a reconciliation discrepancy alert to all clients."""
+        await sio.emit("reconciliation_alert", data)
+
 
 # Singleton instance — import this wherever you need to emit events
 ws_manager = WebSocketManager()

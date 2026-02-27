@@ -318,6 +318,11 @@ async def start_bot(
     if not bot or bot.user_id != user.id:
         raise NotFoundError("Bot", bot_id)
 
+    if not get_alpaca_client(user_id=user.id):
+        raise BadRequestError(
+            "You must configure Alpaca credentials in Settings before starting a bot."
+        )
+
     await _validate_capital(db, user.id, bot.capital, exclude_bot_id=bot_id)
 
     bot.status = "running"

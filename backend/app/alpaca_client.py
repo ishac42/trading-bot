@@ -533,6 +533,11 @@ _default_client: AlpacaClient | None = create_alpaca_client()
 _user_clients: dict[str, AlpacaClient] = {}
 
 
+def get_registered_user_ids() -> list[str]:
+    """Return all user IDs that have a registered Alpaca client."""
+    return list(_user_clients.keys())
+
+
 def get_alpaca_client(user_id: str | None = None) -> AlpacaClient | None:
     """
     Return the Alpaca client for the given user.

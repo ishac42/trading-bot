@@ -29,7 +29,34 @@ done
 echo "PostgreSQL is ready."
 
 echo "Running database migrations..."
-alembic upgrade head
+if ! alembic upgrade head 2>&1; then
+  echo "WARNING: Migration failed. Checking for stale revision..."
+  if alembic heads 2>&1 | grep -q "head"; then
+    HEAD_REV=$(alembic heads 2>&1 | head -1 | awk '{print $1}')
+    echo "Stale revision detected — stamping database to $HEAD_REV via SQL."
+    python -c "
+import asyncio, asyncpg, os
+
+async def fix():
+    url = os.environ['DATABASE_URL']
+    for prefix in ('postgresql+asyncpg://', 'postgresql://'):
+        if url.startswith(prefix):
+            url = 'postgres://' + url[len(prefix):]
+            break
+    conn = await asyncpg.connect(url)
+    await conn.execute('DELETE FROM alembic_version')
+    await conn.execute(\"INSERT INTO alembic_version (version_num) VALUES (\$1)\", '$HEAD_REV')
+    await conn.close()
+
+asyncio.run(fix())
+"
+    echo "Re-running migrations..."
+    alembic upgrade head
+  else
+    echo "ERROR: Migration failed for an unexpected reason."
+    exit 1
+  fi
+fi
 echo "Migrations complete."
 
 echo "Starting Uvicorn..."

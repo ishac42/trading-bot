@@ -17,6 +17,7 @@ from app.alpaca_client import get_alpaca_client
 from app.auth import get_current_user
 from app.database import get_db
 from app.models import Bot, Position, Trade, User
+from app.reconciler import reconciler
 
 logger = structlog.get_logger(__name__)
 
@@ -122,16 +123,21 @@ async def get_account(
 @router.get("/account/reconcile")
 async def reconcile(
     limit: int = Query(100, ge=1, le=500),
+    auto_fix: bool = Query(False),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Compare local Trade records against Alpaca's closed orders.
 
+    When auto_fix=true, also runs the full position reconciler which
+    resolves pending trades and auto-closes stale DB positions.
+
     Returns:
       - synced_count: orders that match between DB and Alpaca
       - discrepancies: list of issues found
       - last_checked: ISO timestamp of this check
+      - reconciliation: (only when auto_fix=true) actions taken by reconciler
     """
     client = get_alpaca_client(user_id=user.id)
     if not client:
@@ -256,8 +262,20 @@ async def reconcile(
                 "detail": "Filled Alpaca order with bot client_order_id not found in DB",
             })
 
-    return {
+    result = {
         "synced_count": synced_count,
         "discrepancies": discrepancies,
         "last_checked": datetime.now(timezone.utc).isoformat(),
     }
+
+    if auto_fix:
+        client = get_alpaca_client(user_id=user.id)
+        if client:
+            try:
+                recon = await reconciler.full_reconciliation()
+                result["reconciliation"] = recon
+            except Exception as e:
+                logger.error("Auto-fix reconciliation failed: %s", e)
+                result["reconciliation"] = {"error": str(e)}
+
+    return result
