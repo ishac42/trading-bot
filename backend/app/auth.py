@@ -24,6 +24,16 @@ from app.database import get_db
 from app.exceptions import UnauthorizedError
 from app.models import User
 
+# Lazy import to avoid circular dependency at module level
+_activity_logger = None
+
+def _get_activity_logger():
+    global _activity_logger
+    if _activity_logger is None:
+        from app.activity_logger import activity_logger
+        _activity_logger = activity_logger
+    return _activity_logger
+
 logger = structlog.get_logger(__name__)
 
 # Reusable transport for Google token verification
@@ -49,6 +59,15 @@ def verify_google_token(credential: str) -> dict:
         return payload
     except ValueError as e:
         logger.warning("google_token_verification_failed", error=str(e))
+        import asyncio
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(_get_activity_logger().auth_event(
+                f"Google token verification failed: {e}",
+                level="warning",
+            ))
+        except RuntimeError:
+            pass
         raise UnauthorizedError("Invalid Google credential") from e
 
 

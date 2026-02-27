@@ -15,6 +15,7 @@ import NotificationsIcon from '@mui/icons-material/Notifications'
 import DisplaySettingsIcon from '@mui/icons-material/DisplaySettings'
 import PaletteIcon from '@mui/icons-material/Palette'
 import StorageIcon from '@mui/icons-material/Storage'
+import ListAltIcon from '@mui/icons-material/ListAlt'
 
 export type SettingsSection =
   | 'broker'
@@ -22,6 +23,7 @@ export type SettingsSection =
   | 'display'
   | 'appearance'
   | 'data'
+  | 'activity'
 
 interface SectionItem {
   id: SettingsSection
@@ -35,6 +37,7 @@ const sections: SectionItem[] = [
   { id: 'display', label: 'Display', icon: <DisplaySettingsIcon /> },
   { id: 'appearance', label: 'Appearance', icon: <PaletteIcon /> },
   { id: 'data', label: 'Data Management', icon: <StorageIcon /> },
+  { id: 'activity', label: 'Activity Log', icon: <ListAltIcon /> },
 ]
 
 interface SettingsSidebarProps {

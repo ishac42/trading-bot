@@ -35,6 +35,12 @@ router = APIRouter(prefix="/trades", tags=["trades"])
 
 def _trade_to_response(trade: Trade) -> dict:
     """Convert a Trade ORM model to the response dict with ISO timestamps."""
+    profit_loss_pct: float | None = None
+    if trade.profit_loss is not None and trade.quantity > 0:
+        cost_basis = trade.price * trade.quantity - trade.profit_loss
+        if cost_basis > 0:
+            profit_loss_pct = round((trade.profit_loss / cost_basis) * 100, 2)
+
     return {
         "id": trade.id,
         "bot_id": trade.bot_id,
@@ -45,6 +51,7 @@ def _trade_to_response(trade: Trade) -> dict:
         "timestamp": trade.timestamp.isoformat() if trade.timestamp else None,
         "indicators_snapshot": trade.indicators_snapshot,
         "profit_loss": trade.profit_loss,
+        "profit_loss_pct": profit_loss_pct,
         "order_id": trade.order_id,
         "status": trade.status,
         "commission": trade.commission,

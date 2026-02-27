@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.activity_logger import activity_logger
 from app.auth import create_jwt, get_current_user, verify_google_token
 from app.database import get_db
 from app.models import User
@@ -49,6 +50,11 @@ async def google_login(
         user.avatar_url = avatar_url
         user.last_login_at = datetime.now(timezone.utc)
         logger.info("user_login", user_id=user.id, email=user.email)
+        await activity_logger.auth_event(
+            f"User '{name}' ({email}) logged in",
+            user_id=user.id,
+            email=email,
+        )
     else:
         user = User(
             email=email,
@@ -60,6 +66,11 @@ async def google_login(
         db.add(user)
         await db.flush()
         logger.info("user_created", user_id=user.id, email=user.email)
+        await activity_logger.auth_event(
+            f"New user '{name}' ({email}) created via Google OAuth",
+            user_id=user.id,
+            email=email,
+        )
 
     token = create_jwt(user.id)
 

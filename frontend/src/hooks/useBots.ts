@@ -79,6 +79,7 @@ export const useCreateBot = () => {
           trades_today: 0,
           win_rate: 0,
           today_pnl: 0,
+          total_pnl: 0,
         }
         // Add to mock data (won't persist across page refreshes)
         mockBots.push(newBot)

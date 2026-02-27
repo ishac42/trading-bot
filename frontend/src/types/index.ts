@@ -44,6 +44,7 @@ export interface Bot {
   trades_today: number
   win_rate: number
   today_pnl: number
+  total_pnl: number
 }
 
 export interface RiskManagement {
@@ -64,6 +65,7 @@ export interface Trade {
   timestamp: string
   indicators_snapshot?: Record<string, any>
   profit_loss?: number
+  profit_loss_pct?: number
   order_id?: string
   status: 'pending' | 'filled' | 'cancelled' | 'failed'
     | 'accepted' | 'partially_filled' | 'pending_new'
@@ -342,4 +344,34 @@ export interface DataStats {
   total_trades: number
   total_positions: number
   open_positions: number
+}
+
+// =====================
+// Activity Log Types
+// =====================
+
+export interface ActivityLogEntry {
+  id: string
+  timestamp: string
+  level: 'debug' | 'info' | 'warning' | 'error'
+  category: 'trade' | 'bot' | 'auth' | 'system' | 'risk' | 'error'
+  message: string
+  details?: Record<string, any>
+  bot_id?: string
+  user_id?: string
+}
+
+export interface ActivityLogFilters {
+  level: string
+  category: string
+  botId: string
+  dateRange: string
+  search: string
+}
+
+export interface ActivityLogPagination {
+  page: number
+  pageSize: number
+  totalItems: number
+  totalPages: number
 }
