@@ -178,8 +178,13 @@ export const BotListCard: React.FC<BotListCardProps> = ({
       {/* Row 4 — P&L | Trades | Win Rate | Last Trade */}
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: { xs: 1, sm: 2 }, alignItems: 'center' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <Typography variant="body2" color="text.secondary">P&L:</Typography>
+          <Typography variant="body2" color="text.secondary">Today:</Typography>
           <PnLDisplay amount={bot.today_pnl} percentage={pnlPct} showSign size="small" bold />
+        </Box>
+        <Divider orientation="vertical" flexItem />
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <Typography variant="body2" color="text.secondary">Total P&L:</Typography>
+          <PnLDisplay amount={bot.total_pnl} showSign size="small" bold />
         </Box>
         <Divider orientation="vertical" flexItem />
         <Typography variant="body2" color="text.secondary">

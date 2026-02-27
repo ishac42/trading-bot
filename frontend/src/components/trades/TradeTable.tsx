@@ -90,7 +90,7 @@ const TradeCardMobile: React.FC<{
         />
       </Box>
       {trade.profit_loss !== undefined ? (
-        <PnLDisplay amount={trade.profit_loss} showSign size="small" bold />
+        <PnLDisplay amount={trade.profit_loss} percentage={trade.profit_loss_pct} showSign size="small" bold />
       ) : (
         <Typography variant="body2" color="text.secondary">
           -
@@ -324,6 +324,7 @@ export const TradeTable: React.FC<TradeTableProps> = ({
                     {trade.profit_loss !== undefined ? (
                       <PnLDisplay
                         amount={trade.profit_loss}
+                        percentage={trade.profit_loss_pct}
                         showSign
                         size="small"
                         bold

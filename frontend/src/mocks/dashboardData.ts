@@ -39,6 +39,7 @@ export const mockBots: Bot[] = [
     trades_today: 0,
     win_rate: 0,
     today_pnl: 0,
+    total_pnl: 0,
   },
   {
     id: 'bot-2',
@@ -71,6 +72,7 @@ export const mockBots: Bot[] = [
     trades_today: 0,
     win_rate: 0,
     today_pnl: 0,
+    total_pnl: 0,
   },
   {
     id: 'bot-3',
@@ -103,6 +105,7 @@ export const mockBots: Bot[] = [
     trades_today: 0,
     win_rate: 0,
     today_pnl: 0,
+    total_pnl: 0,
   },
   {
     id: 'bot-4',
@@ -135,6 +138,7 @@ export const mockBots: Bot[] = [
     trades_today: 0,
     win_rate: 0,
     today_pnl: 0,
+    total_pnl: 0,
   },
   {
     id: 'bot-5',
@@ -167,6 +171,7 @@ export const mockBots: Bot[] = [
     trades_today: 0,
     win_rate: 0,
     today_pnl: 0,
+    total_pnl: 0,
   },
 ]
 

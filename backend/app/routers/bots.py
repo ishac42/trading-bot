@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.activity_logger import activity_logger
 from app.auth import get_current_user
 from app.database import get_db
 from app.exceptions import NotFoundError, ConflictError, BadRequestError
@@ -70,6 +71,7 @@ def _bot_to_response(
     trades_today: int = 0,
     win_rate: float = 0.0,
     today_pnl: float = 0.0,
+    total_pnl: float = 0.0,
 ) -> dict:
     """Convert a Bot ORM model to the response dict with ISO timestamps."""
     return {
@@ -94,14 +96,15 @@ def _bot_to_response(
         "trades_today": trades_today,
         "win_rate": round(win_rate, 1),
         "today_pnl": round(today_pnl, 2),
+        "total_pnl": round(total_pnl, 2),
     }
 
 
 async def _get_bot_metrics(db: AsyncSession, bot_ids: list[str] | None = None):
     """
-    Batch-compute per-bot trading metrics: trades_today, win_rate, today_pnl.
+    Batch-compute per-bot trading metrics: trades_today, win_rate, today_pnl, total_pnl.
     If bot_ids is None, computes for all bots that have trades.
-    Returns a dict mapping bot_id -> {trades_today, win_rate, today_pnl}.
+    Returns a dict mapping bot_id -> {trades_today, win_rate, today_pnl, total_pnl}.
     """
     now = datetime.now(timezone.utc)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -124,6 +127,14 @@ async def _get_bot_metrics(db: AsyncSession, bot_ids: list[str] | None = None):
     )
     today_pnl_map = {row[0]: float(row[1]) for row in today_pnl_result}
 
+    # Total (all-time) P&L per bot
+    total_pnl_result = await db.execute(
+        select(Trade.bot_id, func.coalesce(func.sum(Trade.profit_loss), 0.0))
+        .where(bot_filter, Trade.profit_loss.isnot(None))
+        .group_by(Trade.bot_id)
+    )
+    total_pnl_map = {row[0]: float(row[1]) for row in total_pnl_result}
+
     # Win rate per bot (all-time, based on closed trades with profit_loss)
     win_rate_result = await db.execute(
         select(
@@ -141,12 +152,13 @@ async def _get_bot_metrics(db: AsyncSession, bot_ids: list[str] | None = None):
         win_rate_map[row[0]] = (wins / total * 100) if total > 0 else 0.0
 
     # Merge into a single dict
-    all_bot_ids = set(trades_today_map) | set(today_pnl_map) | set(win_rate_map)
+    all_bot_ids = set(trades_today_map) | set(today_pnl_map) | set(win_rate_map) | set(total_pnl_map)
     return {
         bid: {
             "trades_today": trades_today_map.get(bid, 0),
             "win_rate": win_rate_map.get(bid, 0.0),
             "today_pnl": today_pnl_map.get(bid, 0.0),
+            "total_pnl": total_pnl_map.get(bid, 0.0),
         }
         for bid in all_bot_ids
     }
@@ -213,6 +225,13 @@ async def create_bot(
     db.add(bot)
     await db.flush()
     await db.refresh(bot)
+    await activity_logger.bot_event(
+        f"Bot '{bot.name}' created",
+        bot_id=bot.id,
+        user_id=user.id,
+        symbols=bot.symbols,
+        capital=bot.capital,
+    )
     return _bot_to_response(bot)
 
 
@@ -279,7 +298,12 @@ async def delete_bot(
         raise NotFoundError("Bot", bot_id)
     if bot.status == "running":
         raise ConflictError("Cannot delete a running bot. Stop it first.", error_code="BOT_RUNNING")
+    bot_name = bot.name
     await db.delete(bot)
+    await activity_logger.bot_event(
+        f"Bot '{bot_name}' deleted",
+        user_id=user.id,
+    )
     return {"success": True}
 
 
