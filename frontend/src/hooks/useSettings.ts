@@ -73,6 +73,9 @@ export function useSettings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['data-stats'] })
       queryClient.invalidateQueries({ queryKey: ['trades'] })
+      queryClient.invalidateQueries({ queryKey: ['positions'] })
+      queryClient.invalidateQueries({ queryKey: ['account'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] })
     },
   })
 
