@@ -543,120 +543,172 @@ class BotRunner:
                 logger.debug("No open position for %s to sell, skipping", symbol)
                 return
 
-            try:
-                coid = generate_client_order_id(self.bot_id)
+            # Capture position data before detaching from session
+            pos_id = position.id
+            pos_qty = position.quantity
+            pos_entry_price = position.entry_price
+            pos_stop_loss = position.stop_loss_price
+            pos_take_profit = position.take_profit_price
+            pos_opened_at = position.opened_at
+            pos_entry_indicator = position.entry_indicator
 
-                order_result = await client.submit_market_order(
-                    symbol=symbol,
-                    qty=position.quantity,
-                    side="sell",
-                    time_in_force="day",
-                    client_order_id=coid,
-                )
+        try:
+            coid = generate_client_order_id(self.bot_id)
 
-                order_status = await self._wait_for_fill(order_result["id"])
-                sell_status = order_status.get("status", "pending")
+            order_result = await client.submit_market_order(
+                symbol=symbol,
+                qty=pos_qty,
+                side="sell",
+                time_in_force="day",
+                client_order_id=coid,
+            )
 
-                if sell_status in ("canceled", "cancelled", "expired", "rejected"):
-                    logger.warning(
-                        "SELL order for %s was %s, position remains open",
-                        symbol, sell_status,
-                    )
-                    return
+            # Record trade IMMEDIATELY with status="new" so the reconciler
+            # can always find and resolve it if the fill confirmation fails.
+            trade_id = generate_uuid()
+            now = utcnow()
+            preliminary_pnl = round((current_price - pos_entry_price) * pos_qty, 2)
 
-                filled_price = order_status.get("filled_avg_price")
-                if not filled_price:
-                    logger.error(
-                        "SELL order %s has no filled_avg_price (status=%s). "
-                        "Using current_price=%s as fallback for P&L calc.",
-                        order_result["id"][:8], sell_status, current_price,
-                    )
-                    filled_price = current_price
-
-                profit_loss = round((filled_price - position.entry_price) * position.quantity, 2)
-
-                # Update position
-                now = utcnow()
-                position.is_open = False
-                position.closed_at = now
-                position.current_price = filled_price
-                position.realized_pnl = profit_loss
-                position.unrealized_pnl = 0.0
-
+            async with async_session() as session:
                 trade = Trade(
-                    id=generate_uuid(),
+                    id=trade_id,
                     bot_id=self.bot_id,
                     symbol=symbol,
                     type="sell",
-                    quantity=position.quantity,
-                    price=filled_price,
+                    quantity=pos_qty,
+                    price=current_price,
                     timestamp=now,
                     indicators_snapshot=indicators_snapshot,
-                    profit_loss=profit_loss,
+                    profit_loss=preliminary_pnl,
                     order_id=order_result["id"],
-                    status="filled" if order_status.get("status") == "filled" else order_status.get("status", "pending"),
+                    status="new",
                     client_order_id=coid,
                     reason=reason,
                 )
                 session.add(trade)
                 await session.commit()
 
-                # Refresh to get updated values
-                await session.refresh(position)
+            logger.info(
+                "SELL order submitted & pending trade created: %s x%d (order=%s, bot=%s)",
+                symbol, pos_qty, order_result["id"][:8], self.bot_id[:8],
+            )
+
+            # Now wait for the fill and update records with actual data
+            order_status = await self._wait_for_fill(order_result["id"])
+            sell_status = order_status.get("status", "pending")
+
+            if sell_status in ("canceled", "cancelled", "expired", "rejected"):
+                # Order was rejected — revert: remove the pending trade, position stays open
+                async with async_session() as session:
+                    db_trade = await session.get(Trade, trade_id)
+                    if db_trade:
+                        db_trade.status = sell_status
+                    await session.commit()
+                logger.warning(
+                    "SELL order for %s was %s, position remains open",
+                    symbol, sell_status,
+                )
+                return
+
+            filled_price = order_status.get("filled_avg_price")
+            if filled_price is not None:
+                filled_price = float(filled_price)
+            if not filled_price:
+                logger.error(
+                    "SELL order %s has no filled_avg_price (status=%s). "
+                    "Using current_price=%s as fallback for P&L calc.",
+                    order_result["id"][:8], sell_status, current_price,
+                )
+                filled_price = current_price
+
+            profit_loss = round((filled_price - pos_entry_price) * pos_qty, 2)
+
+            # Update trade and position with actual fill data
+            async with async_session() as session:
+                db_trade = await session.get(Trade, trade_id)
+                db_pos = await session.get(Position, pos_id)
+
+                if db_trade:
+                    db_trade.status = "filled" if sell_status == "filled" else sell_status
+                    db_trade.price = filled_price
+                    db_trade.profit_loss = profit_loss
+
+                if db_pos:
+                    db_pos.is_open = False
+                    db_pos.closed_at = utcnow()
+                    db_pos.current_price = filled_price
+                    db_pos.realized_pnl = profit_loss
+                    db_pos.unrealized_pnl = 0.0
+
+                await session.commit()
+
+                if db_trade:
+                    await session.refresh(db_trade)
+                if db_pos:
+                    await session.refresh(db_pos)
 
                 # Emit WebSocket events
-                await ws_manager.emit_trade_executed({
-                    "id": trade.id,
-                    "bot_id": trade.bot_id,
-                    "symbol": trade.symbol,
-                    "type": trade.type,
-                    "quantity": trade.quantity,
-                    "price": trade.price,
-                    "timestamp": trade.timestamp.isoformat(),
-                    "profit_loss": trade.profit_loss,
-                    "status": trade.status,
-                    "order_id": trade.order_id,
-                })
-                await ws_manager.emit_position_updated({
-                    "id": position.id,
-                    "bot_id": position.bot_id,
-                    "symbol": position.symbol,
-                    "quantity": position.quantity,
-                    "entry_price": position.entry_price,
-                    "current_price": position.current_price,
-                    "stop_loss_price": position.stop_loss_price,
-                    "take_profit_price": position.take_profit_price,
-                    "unrealized_pnl": position.unrealized_pnl,
-                    "realized_pnl": position.realized_pnl,
-                    "opened_at": position.opened_at.isoformat(),
-                    "closed_at": position.closed_at.isoformat() if position.closed_at else None,
-                    "is_open": position.is_open,
-                    "entry_indicator": position.entry_indicator,
-                })
+                if db_trade:
+                    await ws_manager.emit_trade_executed({
+                        "id": db_trade.id,
+                        "bot_id": db_trade.bot_id,
+                        "symbol": db_trade.symbol,
+                        "type": db_trade.type,
+                        "quantity": db_trade.quantity,
+                        "price": db_trade.price,
+                        "timestamp": db_trade.timestamp.isoformat(),
+                        "profit_loss": db_trade.profit_loss,
+                        "status": db_trade.status,
+                        "order_id": db_trade.order_id,
+                    })
+                if db_pos:
+                    await ws_manager.emit_position_updated({
+                        "id": db_pos.id,
+                        "bot_id": db_pos.bot_id,
+                        "symbol": db_pos.symbol,
+                        "quantity": db_pos.quantity,
+                        "entry_price": db_pos.entry_price,
+                        "current_price": db_pos.current_price,
+                        "stop_loss_price": db_pos.stop_loss_price,
+                        "take_profit_price": db_pos.take_profit_price,
+                        "unrealized_pnl": db_pos.unrealized_pnl,
+                        "realized_pnl": db_pos.realized_pnl,
+                        "opened_at": db_pos.opened_at.isoformat(),
+                        "closed_at": db_pos.closed_at.isoformat() if db_pos.closed_at else None,
+                        "is_open": db_pos.is_open,
+                        "entry_indicator": db_pos.entry_indicator,
+                    })
 
-                logger.info(
-                    "SELL executed: %s x%d @ %.2f P&L=%.2f (order=%s, bot=%s)",
-                    symbol, position.quantity, filled_price, profit_loss,
-                    order_result["id"][:8], self.bot_id[:8],
-                )
-                await activity_logger.trade(
-                    f"SELL {symbol} x{position.quantity} @ ${filled_price:.2f} — P&L: ${profit_loss:+.2f}",
-                    bot_id=self.bot_id,
-                    symbol=symbol,
-                    quantity=position.quantity,
-                    price=filled_price,
-                    profit_loss=profit_loss,
-                    reason=reason,
-                    order_id=order_result["id"],
+            logger.info(
+                "SELL executed: %s x%d @ %.2f P&L=%.2f (order=%s, bot=%s)",
+                symbol, pos_qty, filled_price, profit_loss,
+                order_result["id"][:8], self.bot_id[:8],
+            )
+            await activity_logger.trade(
+                f"SELL {symbol} x{pos_qty} @ ${filled_price:.2f} — P&L: ${profit_loss:+.2f}",
+                bot_id=self.bot_id,
+                symbol=symbol,
+                quantity=pos_qty,
+                price=filled_price,
+                profit_loss=profit_loss,
+                reason=reason,
+                order_id=order_result["id"],
+            )
+
+            if sell_status != "filled":
+                logger.warning(
+                    "SELL order %s fill not confirmed after timeout (status=%s). "
+                    "Trade recorded with status='new' for reconciler to resolve.",
+                    order_result["id"][:8], sell_status,
                 )
 
-            except Exception as e:
-                logger.error("Failed to execute SELL for %s: %s", symbol, e)
-                await activity_logger.error_event(
-                    f"Failed to execute SELL for {symbol}: {e}",
-                    bot_id=self.bot_id,
-                    symbol=symbol,
-                )
+        except Exception as e:
+            logger.error("Failed to execute SELL for %s: %s", symbol, e)
+            await activity_logger.error_event(
+                f"Failed to execute SELL for {symbol}: {e}",
+                bot_id=self.bot_id,
+                symbol=symbol,
+            )
 
     async def _get_open_position(self, symbol: str) -> Position | None:
         """Fetch the open position for this bot+symbol, if any."""

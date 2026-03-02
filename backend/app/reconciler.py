@@ -106,7 +106,7 @@ class PositionReconciler:
                 .join(Bot)
                 .where(
                     Bot.user_id == user_id,
-                    Trade.status.in_(["new", "partially_filled"]),
+                    Trade.status.in_(["new", "partially_filled", "pending_new", "pending", "accepted"]),
                 )
             )
             pending_trades = result.scalars().all()
@@ -165,8 +165,21 @@ class PositionReconciler:
         position = pos_result.scalars().first()
 
         if position:
-            position.entry_price = float(fill_price)
-            position.quantity = int(filled_qty)
+            if trade.type == "sell":
+                # Sell trade filled: close the position and calculate P&L
+                profit_loss = round(
+                    (float(fill_price) - position.entry_price) * int(filled_qty), 2
+                )
+                position.is_open = False
+                position.closed_at = utcnow()
+                position.current_price = float(fill_price)
+                position.realized_pnl = profit_loss
+                position.unrealized_pnl = 0.0
+                trade.profit_loss = profit_loss
+            else:
+                # Buy trade filled: update entry price and quantity
+                position.entry_price = float(fill_price)
+                position.quantity = int(filled_qty)
 
         logger.info(
             "pending_trade_filled",
