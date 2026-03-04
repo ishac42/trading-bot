@@ -610,6 +610,23 @@ class BotRunner:
                 )
                 return
 
+            if sell_status != "filled":
+                # _wait_for_fill timed out with a non-terminal status (e.g. "new",
+                # "accepted"). The sell may or may not eventually fill on Alpaca.
+                # Keep the position OPEN so we don't lose track of shares.
+                # The reconciler will resolve the pending trade later.
+                async with async_session() as session:
+                    db_trade = await session.get(Trade, trade_id)
+                    if db_trade:
+                        db_trade.status = sell_status
+                    await session.commit()
+                logger.warning(
+                    "SELL order %s not confirmed filled after timeout (status=%s). "
+                    "Position remains open; pending trade left for reconciler.",
+                    order_result["id"][:8], sell_status,
+                )
+                return
+
             filled_price = order_status.get("filled_avg_price")
             if filled_price is not None:
                 filled_price = float(filled_price)
@@ -623,13 +640,13 @@ class BotRunner:
 
             profit_loss = round((filled_price - pos_entry_price) * pos_qty, 2)
 
-            # Update trade and position with actual fill data
+            # Update trade and close position — only reached when sell is confirmed filled
             async with async_session() as session:
                 db_trade = await session.get(Trade, trade_id)
                 db_pos = await session.get(Position, pos_id)
 
                 if db_trade:
-                    db_trade.status = "filled" if sell_status == "filled" else sell_status
+                    db_trade.status = "filled"
                     db_trade.price = filled_price
                     db_trade.profit_loss = profit_loss
 
@@ -694,13 +711,6 @@ class BotRunner:
                 reason=reason,
                 order_id=order_result["id"],
             )
-
-            if sell_status != "filled":
-                logger.warning(
-                    "SELL order %s fill not confirmed after timeout (status=%s). "
-                    "Trade recorded with status='new' for reconciler to resolve.",
-                    order_result["id"][:8], sell_status,
-                )
 
         except Exception as e:
             logger.error("Failed to execute SELL for %s: %s", symbol, e)
