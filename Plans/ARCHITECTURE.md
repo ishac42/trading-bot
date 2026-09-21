@@ -28,12 +28,12 @@ Typical hold 15–120 minutes; hard max 4 hours. First production cut: **U.S. eq
 ### Live system (one book)
 
 - **One hybrid selector**, not a vote of contradictory indicators and not “first BUY indicator wins.”
-- **One portfolio risk engine** is the authority. Strategy may request; risk decides size and permission.
-- **One universe** of liquid U.S. names, configured by filters (dollar volume, price floor, RTH spread), then scanned on a stream. Users do not type per-bot tickers.
-- **One account mode** at a time on the live book: paper / shadow / min-size live. Two live parameter sets must not independently size the same buying power.
-- **Kill switch, flatten, and lock** are first-class controls, not optional bot flags.
+- **One portfolio risk engine** is the authority. A bot may request a size from its own risk parameters; the book decides permission and shrinks that size to the remaining budget.
+- **Bots are universe profiles.** Each bot owns a name, universe filters (dollar volume, price floor, RTH spread), its own risk parameters, start/stop, and its own statistics. Users do not type tickers, pick indicators, or give a bot its own buying power.
+- **One account mode** at a time on the live book: paper / shadow / min-size live. Every running bot sizes the same account. The book caps are the sum. A bot cannot be a second account.
+- **Kill switch, flatten, and lock** are book controls. They apply to every running bot. A bot’s own loss limit can stop that bot earlier. It cannot keep trading after the book lock.
 
-A named **strategy version** (locked parameter set + hash + promotion state `research → paper → shadow → live`) may exist for research and promotion. It is not a user-built “bot” and is not the risk unit.
+A named **strategy version** (locked parameter set + hash + promotion state `research → paper → shadow → live`) may exist for research and promotion. It is the decision logic shared by every bot. It is not a separate risk book.
 
 ### What Settings is for
 
@@ -41,38 +41,54 @@ Settings is the control-plane home for how the single book is allowed to trade:
 
 | Settings section | Role |
 |---|---|
-| **Universe** (new, replaces Bots factory) | Membership rules: liquid U.S. names (target top 50–100 by recent dollar volume), price ≥ ~$5, RTH spread ~10–15 bps, point-in-time snapshot preview. Not a free-typed symbol list per runner. |
 | Broker | Per-user Alpaca credentials, paper vs live URL guard, connection test |
 | Feed | SIP required for research and for any production path that uses VWAP, volume, or spread. IEX is a degraded diagnostic feed only. |
-| Session | RTH on by default; extended hours a separate flag, off |
-| Risk | Research-default ladder, editable only inside hard caps; kill / flatten / lock |
+| Session | RTH on by default; extended hours a separate flag, off. Shared by every bot. |
+| **Book risk** | Hard caps and the daily ladder. Kill / flatten / lock. Bots cannot loosen these. |
 | Account mode | Paper / shadow / min-size live |
 | Fees | Versioned fee-tier refresh (never hardcoded) |
 | Existing prefs | Notifications, display, appearance, data export/clear, activity log — keep |
 
+Universe filters and per-bot risk parameters live on the bot, not as the only Settings section. Settings → Book risk is the ceiling those parameters are clamped to.
+
 ### What happens to Bots (create / edit / list)
 
-| Current surface (as shipped) | Reboot fate |
-|---|---|
-| Primary nav **Bots** (`/bots`) | **Removed.** List of runners with search, status tabs, and start/pause/stop is not the product. |
-| **Create bot** (`/bots/create`) | **Removed.** No form for name, capital, symbols, indicator checkboxes, percent SL/TP, or trading window. |
-| **Edit bot** (`/bots/:botId/edit`) | **Removed.** Same factory form does not come back as “edit strategy.” |
-| Dashboard **Active bots** cards / start-pause-stop | **Removed.** Dashboard shows book risk, regime, kill-switch state, open-risk, data freshness — not “how many bots are running.” |
-| `GET/POST /api/bots`, start/pause/stop | **Retired as the live contract.** During cutover, routes may 410 or redirect; they must not remain the way to put risk on. |
-| `bots` table / `Bot` ORM | **Not the risk unit.** Historical rows and voter fills are **archive** only. Do not train or validate the new system on old fills. A thin row may linger as a UI alias for a strategy version so old URLs do not 500 during cutover; it must not own capital, symbols, or indicators. |
+A bot is a named profile the book can run. It is not the old factory (capital pot, typed symbols, indicator checkboxes, percent-of-price stop, trading window).
 
-Cutover UX: `/bots`, `/bots/create`, and `/bots/:id/edit` redirect to **Settings → Universe** (and Settings is reachable from primary nav, not only the avatar menu).
+| Surface | Role |
+|---|---|
+| **Bots** (`/bots`) | List of profiles. Search, running/stopped, universe summary, that bot’s P&L and trade count. Start and stop. |
+| **Create / edit** (`/bots/create`, `/bots/:id/edit`) | Name, universe filters, membership preview, and that bot’s risk parameters. No symbol list, no indicators, no per-bot capital account. |
+| Dashboard | Book risk, regime, kill switch, data freshness, **and** the running bots with start/stop and each bot’s stats. |
+| `GET/POST /api/bots`, start/stop | Live contract for profiles. Start begins that bot’s scan. Stop ends it. Start does not open a second buying-power pool. |
+| `bots` table | Profile row: name, status, universe filters, risk parameters, stats. Old indicator-vote rows stay archive and are not used to size or train. |
+
+**Per-bot risk parameters** (each editable, each clamped to the book hard caps):
+
+| Parameter | Bot default | Cannot be looser than |
+|---|---|---|
+| Risk per trade | 0.25% | Book cap 0.25% |
+| Max open stop-risk for this bot | 0.75% | Book aggregate 0.75% |
+| Max positions for this bot | 3 | Book max 3 |
+| Single-name notional | 25% | Book cap 25% |
+| Min score | 70 | Book floor 70 |
+| Min target | 1.5R and 3× cost | Book floor |
+| Sleeve loss limit | −2% of equity | Book daily lock. A tighter sleeve limit stops **this bot** only. |
+
+The book risk engine then applies the shared budget: aggregate open stop-risk, gross exposure, correlation, and the marked daily P&L ladder. If two running bots each allow 0.75% open risk, the engine still refuses new risk once the **book** has 0.75% open. The −2% flatten-and-lock flattens every bot.
+
+Each bot’s statistics (trades, marked P&L, win rate, expectancy, veto counts) are stored on that profile. Positions and fills record `bot_id` so Analytics can split by bot. The daily lock uses the **book** total, not a per-bot reset of the same 2%.
 
 ### Navigation
 
 **Current (retired product):** `Dashboard · Bots · Positions · Trades · Analytics` (+ Theme Preview). Settings lives only under the user avatar.
 
-**Target primary nav:** `Dashboard · Positions · Trades · Analytics · Settings`
+**Target primary nav:** `Dashboard · Bots · Positions · Trades · Analytics · Settings`
 
-- **Settings** moves into the primary tab bar because universe, session, feed, and risk caps are core product, not account chrome.
+- **Bots** is the list of universe profiles (filters, risk parameters, start/stop, stats).
+- **Settings** stays in the primary tab bar for broker, feed, session, book-level risk caps, kill/flatten/lock, and account mode.
 - Avatar menu may still deep-link to Settings.
 - Theme Preview stays a hidden/dev route, not a product tab.
-- No Bots tab. No “create bot” affordance.
 
 ## Technology stack
 
@@ -201,9 +217,9 @@ Risk sits **above** strategy. Starting book for a **$5,000** design default, 1×
 | Min confidence | 70/100 |
 | Min gross target | ≥ 1.5R and ≥ 3× expected round-trip cost |
 
-Daily P&L is **realized + unrealized + estimated liquidation cost**, session-correct (not UTC-midnight realized-only per bot). Size from **stop distance + emergency-exit cost**, then cap notional, portfolio, and correlation. ATR stops (~1.2 ATR stocks), not a fixed 2% of price. Correlation: names above ~0.75 share a cluster budget.
+Daily P&L is **realized + unrealized + estimated liquidation cost** for the whole book, session-correct. Size starts from the **bot’s** risk-per-trade and stop distance plus emergency-exit cost, then the engine caps it by that bot’s sleeve limits **and** the book’s remaining open-risk, notional, portfolio, and correlation budget. ATR stops (~1.2 ATR stocks), not a fixed 2% of price. Correlation: names above ~0.75 share a cluster budget across bots.
 
-SELL/flatten paths stay allowed when reducing risk; strategy code cannot bypass halt / flatten / lock.
+A bot’s sleeve loss limit stops that bot. The book −2% lock flattens every bot and blocks new entries from all of them. SELL/flatten paths stay allowed when reducing risk; a bot’s strategy code cannot bypass halt / flatten / lock.
 
 ### 4. Execution adapter (replaces market-order + software poll)
 
@@ -272,7 +288,7 @@ Greenfield strategy/orders/research is cleaner than migrating `bots.indicators`.
 | `risk_events` | Throttle, lock, flatten, mismatch |
 | `research_trials` | Every parameter attempt, including failures |
 | `activity_logs` | Keep; extend with veto-code telemetry |
-| `bots` | Archive / optional cutover alias only |
+| `bots` | Live profile: name, status, universe filters, risk parameters, stats. Old `indicators` / capital / symbol-list rows are archive and are not read for sizing. |
 
 Do not keep `indicators` JSON as the product.
 
@@ -280,15 +296,15 @@ Do not keep `indicators` JSON as the product.
 
 | Surface | Job after reboot |
 |---|---|
-| **Dashboard** (`/`) | Book equity, marked daily P&L vs 2% lock, staged throttle, open-risk, position count, regime, data freshness, kill-switch. Not “active bots.” |
-| **Positions** (`/positions`) | Same page, rebound to the book: score, veto, regime, expected vs realized cost, hold time, ATR stop/target |
-| **Trades** (`/trades`) | Same page + reason/veto codes, shortfall, regime/session |
-| **Analytics** (`/analytics`) | Add expectancy, turnover, CVaR, cost/gross-alpha, regime/session/asset splits. Drop “bot comparison” as a first-class chart. |
-| **Settings** (`/settings`) | **Universe + broker + feed + session + risk + mode** plus existing prefs. This is where the Bots factory’s job goes. |
-| **Bots / Create / Edit** | Deleted as product routes; redirect to Settings → Universe |
+| **Dashboard** (`/`) | Book equity, marked daily P&L vs 2% lock, staged throttle, open-risk, position count, regime, data freshness, kill-switch, plus running bots with each bot’s stats and start/stop. |
+| **Bots** (`/bots`, create, edit) | Universe filters, membership preview, per-bot risk parameters, start/stop, per-bot statistics. |
+| **Positions** (`/positions`) | Book positions plus which bot opened them: score, veto, regime, expected vs realized cost, hold time, ATR stop/target |
+| **Trades** (`/trades`) | Book history plus bot, reason/veto codes, shortfall, regime/session |
+| **Analytics** (`/analytics`) | Expectancy, turnover, CVaR, cost/gross-alpha, regime/session/asset splits, and a split by bot. |
+| **Settings** (`/settings`) | Broker, feed, session, **book** risk caps, kill/flatten/lock, mode, plus existing prefs. |
 | **Research console** (later) | Trials, gates, promotion checklist, veto telemetry — not a second live book |
 
-Settings sidebar today: Broker, Notifications, Display, Appearance, Data, Activity. **Universe** (and Session / Risk / Feed / Mode as needed) insert ahead of personalization. Broker stays; add SIP vs IEX, fee-tier refresh, paper/live mode, session flags there or as sibling sections — not on a bot form.
+Settings sidebar: Book risk, Session, Feed, Account mode, Broker, then Notifications, Display, Appearance, Data, Activity. Universe filters and the editable risk ladder for a sleeve are on the bot form. Book risk in Settings is the hard ceiling and the kill switch.
 
 ## Trading logic flow
 
@@ -503,7 +519,7 @@ Retired product files (do not extend as the live path): `pages/Bots.tsx`, `Creat
 
 Code as of the last mainline (early March 2026) still implements the **retired** product: `BotRunner` poll, IEX 1m bars, indicator vote / entry-indicator tracking, percent risk, Bots nav and factory forms. Auth, settings (broker/prefs), positions/trades pages, reconciler, `client_order_id`, and emergency close are chassis to keep.
 
-This file is the architecture to implement against. Implementation sequencing is [`UI_IMPLEMENTATION_PLAN.md`](./UI_IMPLEMENTATION_PLAN.md) (UI first), then [`POST_UI_IMPLEMENTATION_PLAN.md`](./POST_UI_IMPLEMENTATION_PLAN.md) (control-plane API, then runtime, then research). Do not revive sprint plans that assume N bots.
+This file is the architecture to implement against. Implementation sequencing is [`UI_IMPLEMENTATION_PLAN.md`](./UI_IMPLEMENTATION_PLAN.md) (UI first), then [`POST_UI_IMPLEMENTATION_PLAN.md`](./POST_UI_IMPLEMENTATION_PLAN.md) (control-plane API, then runtime, then research). Bots are universe profiles with their own risk parameters and statistics. Do not revive indicator votes, per-bot capital pots, or typed symbol lists.
 
 ### WebSocket
 
@@ -520,7 +536,7 @@ No Redis requirement. Do not draw Redis on new diagrams until it is actually sub
 ### First-production defaults (from the spec; not for tuning yet)
 
 - $5,000, 1× gross, 3 positions, 0.25% / 0.75% / 2% risk ladder
-- Equities only, RTH, SIP, top 50–100 liquid names via Settings → Universe
+- Equities only, RTH, SIP, top 50–100 liquid names via each bot’s universe filters
 - EMA 9/21/50, RSI 14, ADX 14/23, ATR 14, BB 20,2, MACD 12/26/9 inside the trend block
 - Score ≥ 70, cost multiple 3×, max hold 4h
 - Crypto off; extended hours off; shorts off

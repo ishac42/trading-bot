@@ -11,7 +11,9 @@ Two cuts, in order:
 1. **Control plane** — settings, universe snapshot, book summary, positions/trades fields, flatten/lock, WebSocket events. The UI can drop its mocks. Nothing here places a strategy order.
 2. **Runtime** — one event state machine for one book. Signal code never submits an order. Risk is the authority.
 
-Research (walk-forward, holdout, promotion console) is a later cut. It uses the same decision functions. It does not come back as Bots.
+Research (walk-forward, holdout, promotion console) is a later cut. It uses the same decision functions.
+
+**Bots are live profiles.** Each row stores universe filters, risk parameters, status, and statistics. Start/stop turns that bot’s scan on or off. The risk engine reads the bot’s parameters, then applies the book caps (aggregate open risk, daily lock, kill switch). A sleeve loss limit stops that bot. The book −2% lock flattens every bot. `routers/bots.py` returns for this profile contract. It does not return for indicator votes, per-bot capital, or typed symbol lists.
 
 ---
 
@@ -32,7 +34,7 @@ Research (walk-forward, holdout, promotion console) is a later cut. It uses the 
 
 ## Do not extend
 
-`trading_engine.py` (`BotRunner` poll), `signal_generator.py` vote / `evaluate_single` / entry-indicator contract, `risk_manager.py` percent-of-bot-capital checks, `routers/bots.py` as a way to put risk on, IEX-as-truth bar polls.
+`trading_engine.py` (`BotRunner` poll), `signal_generator.py` vote / `evaluate_single` / entry-indicator contract, `risk_manager.py` percent-of-bot-capital checks, IEX-as-truth bar polls. Do not treat a bot risk parameter as permission to exceed the book caps.
 
 Quarantine `tests/test_signal_generator.py` and any bot-runner tests so a green suite cannot redefine the new contract. New tests live beside the new modules.
 

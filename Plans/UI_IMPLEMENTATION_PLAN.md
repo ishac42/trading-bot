@@ -4,10 +4,22 @@
 >
 > This plan replaces the old Sprint 0–12 UI plan (bot factory, indicator forms, “create a bot” MVP). It also supersedes backend phases that treat `bots` CRUD, indicator votes, and `bot_status_changed` as the product. `Feb16_Implementation_plan.md` is a historical status of that retired system.
 >
-> **UI first:** freeze screens, navigation, and TypeScript contracts against mocks before any trading-runtime or new settings API work. The backend is written to those contracts. Do not extend `pages/Bots.tsx`, `CreateBot.tsx`, `EditBot.tsx`, `components/bots/`, `ActiveBotsList`, or `BotCard` as the live path.
+> **UI first:** freeze screens, navigation, and TypeScript contracts against mocks before any trading-runtime or new settings API work. The backend is written to those contracts.
 
 **Last updated:** 2026-09-21  
-**Approach:** one book, configured from Settings. Screens and typed mocks first; control-plane API second; trading runtime last.
+**Approach:** one book. Each bot is a universe profile with its own risk parameters, start/stop, and statistics. Screens and typed mocks first; control-plane API second; trading runtime last.
+
+## Decision — bots are profiles (after UI-0–UI-3)
+
+UI-0 through UI-3 shipped a single Universe section and removed the Bots tab. That is now incomplete. The product decision is:
+
+- A bot has a name, universe filters, **its own risk parameters**, start/stop, and its own statistics.
+- Create/edit does not restore capital, typed symbols, indicator checkboxes, or a trading window.
+- Settings keeps the **book** ceiling: hard caps, the −2% flatten-and-lock, kill switch, feed, session, and account mode. A bot’s risk fields cannot be saved looser than those caps.
+- Several bots may run. The book risk engine sizes from the bot’s parameters, then shrinks or refuses the order so the sum stays inside the book budget.
+- Dashboard shows the book and the running bots. `/bots` is a real route again.
+
+Next UI slice: restore Bots list, create, and edit in that narrower form, and show per-bot stats on the dashboard. Do not wire the old `useBots` factory payload back in. Add profile types (universe filters + `RiskCaps`) to the book contract first.
 
 ---
 
