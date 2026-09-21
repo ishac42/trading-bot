@@ -2,15 +2,19 @@ import { io, Socket } from 'socket.io-client'
 
 const WS_URL = import.meta.env.VITE_WS_URL || 'http://localhost:8000'
 
-// Backend socket.io server is live — enable WebSocket connections
+// Book events: trade_executed, position_updated, price_update, market_status_changed,
+// risk_event, regime_changed, data_health, universe_updated.
 const WS_ENABLED = true
 
 export type WebSocketEvent =
   | 'trade_executed'
   | 'position_updated'
-  | 'bot_status_changed'
   | 'price_update'
   | 'market_status_changed'
+  | 'risk_event'
+  | 'regime_changed'
+  | 'data_health'
+  | 'universe_updated'
 
 export type WebSocketEventHandler = (data: any) => void
 

@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+import type { SettingsSection } from '@/components/settings/settingsSections'
 import {
   List,
   ListItemButton,
@@ -10,6 +12,11 @@ import {
   MenuItem,
   FormControl,
 } from '@mui/material'
+import PublicIcon from '@mui/icons-material/Public'
+import ScheduleIcon from '@mui/icons-material/Schedule'
+import RssFeedIcon from '@mui/icons-material/RssFeed'
+import ShieldIcon from '@mui/icons-material/Shield'
+import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet'
 import VpnKeyIcon from '@mui/icons-material/VpnKey'
 import NotificationsIcon from '@mui/icons-material/Notifications'
 import DisplaySettingsIcon from '@mui/icons-material/DisplaySettings'
@@ -17,21 +24,18 @@ import PaletteIcon from '@mui/icons-material/Palette'
 import StorageIcon from '@mui/icons-material/Storage'
 import ListAltIcon from '@mui/icons-material/ListAlt'
 
-export type SettingsSection =
-  | 'broker'
-  | 'notifications'
-  | 'display'
-  | 'appearance'
-  | 'data'
-  | 'activity'
-
 interface SectionItem {
   id: SettingsSection
   label: string
-  icon: React.ReactNode
+  icon: ReactNode
 }
 
 const sections: SectionItem[] = [
+  { id: 'universe', label: 'Universe', icon: <PublicIcon /> },
+  { id: 'session', label: 'Session', icon: <ScheduleIcon /> },
+  { id: 'feed', label: 'Feed', icon: <RssFeedIcon /> },
+  { id: 'risk', label: 'Risk', icon: <ShieldIcon /> },
+  { id: 'mode', label: 'Account Mode', icon: <AccountBalanceWalletIcon /> },
   { id: 'broker', label: 'Broker Connection', icon: <VpnKeyIcon /> },
   { id: 'notifications', label: 'Notifications', icon: <NotificationsIcon /> },
   { id: 'display', label: 'Display', icon: <DisplaySettingsIcon /> },

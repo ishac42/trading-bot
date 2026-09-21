@@ -18,7 +18,6 @@ import { useNavigate } from 'react-router-dom'
 import { Card, Button, PnLDisplay, EmptyState, Modal } from '@/components/common'
 import type { Trade } from '@/types'
 import { formatTime, formatCurrency } from '@/utils/formatters'
-import { useBots } from '@/hooks/useBots'
 
 interface RecentTradesTableProps {
   trades?: Trade[]
@@ -28,7 +27,7 @@ interface RecentTradesTableProps {
 /**
  * Trade Detail content shown in modal
  */
-const TradeDetail: React.FC<{ trade: Trade; getBotName: (botId: string) => string }> = ({ trade, getBotName }) => (
+const TradeDetail: React.FC<{ trade: Trade }> = ({ trade }) => (
   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
       <Typography variant="body2" color="text.secondary">
@@ -71,12 +70,22 @@ const TradeDetail: React.FC<{ trade: Trade; getBotName: (botId: string) => strin
         {formatCurrency(trade.price)}
       </Typography>
     </Box>
-    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-      <Typography variant="body2" color="text.secondary">
-        Bot
-      </Typography>
-      <Typography variant="body2">{getBotName(trade.bot_id)}</Typography>
-    </Box>
+    {trade.regime && (
+      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+        <Typography variant="body2" color="text.secondary">
+          Regime
+        </Typography>
+        <Typography variant="body2">{trade.regime}</Typography>
+      </Box>
+    )}
+    {trade.reason_code && (
+      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+        <Typography variant="body2" color="text.secondary">
+          Reason
+        </Typography>
+        <Typography variant="body2">{trade.reason_code}</Typography>
+      </Box>
+    )}
     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
       <Typography variant="body2" color="text.secondary">
         Time
@@ -123,8 +132,7 @@ const TradeDetail: React.FC<{ trade: Trade; getBotName: (botId: string) => strin
 const TradeCardMobile: React.FC<{
   trade: Trade
   onClick: () => void
-  getBotName: (botId: string) => string
-}> = ({ trade, onClick, getBotName }) => (
+}> = ({ trade, onClick }) => (
   <Box
     onClick={onClick}
     sx={{
@@ -174,13 +182,7 @@ const TradeCardMobile: React.FC<{
       <Typography variant="body2" color="text.secondary">
         {formatTime(trade.timestamp)} · Qty: {trade.quantity} ·{' '}
         {formatCurrency(trade.price)}
-      </Typography>
-      <Typography
-        variant="body2"
-        color="text.secondary"
-        sx={{ fontSize: '0.75rem' }}
-      >
-        {getBotName(trade.bot_id)}
+        {trade.regime ? ` · ${trade.regime}` : ''}
       </Typography>
     </Box>
   </Box>
@@ -200,12 +202,6 @@ export const RecentTradesTable: React.FC<RecentTradesTableProps> = ({
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null)
-  const { data: bots } = useBots()
-
-  const getBotName = useCallback(
-    (botId: string) => bots?.find((b) => b.id === botId)?.name || 'Unknown Bot',
-    [bots]
-  )
 
   const handleRowClick = useCallback((trade: Trade) => {
     setSelectedTrade(trade)
@@ -273,7 +269,7 @@ export const RecentTradesTable: React.FC<RecentTradesTableProps> = ({
       {!trades || trades.length === 0 ? (
         <EmptyState
           title="No trades yet"
-          message="Trades will appear here once your bots start trading"
+          message="Trades will appear here when the book takes a position."
           variant="no-data"
           sx={{ minHeight: 200 }}
         />
@@ -285,7 +281,6 @@ export const RecentTradesTable: React.FC<RecentTradesTableProps> = ({
               key={trade.id}
               trade={trade}
               onClick={() => handleRowClick(trade)}
-              getBotName={getBotName}
             />
           ))}
         </Box>
@@ -308,7 +303,6 @@ export const RecentTradesTable: React.FC<RecentTradesTableProps> = ({
                 <TableCell sx={{ fontWeight: 600 }} align="right">
                   Price
                 </TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Bot</TableCell>
                 <TableCell sx={{ fontWeight: 600 }} align="right">
                   P&L
                 </TableCell>
@@ -355,15 +349,6 @@ export const RecentTradesTable: React.FC<RecentTradesTableProps> = ({
                       {formatCurrency(trade.price)}
                     </Typography>
                   </TableCell>
-                  <TableCell>
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ fontSize: '0.8rem' }}
-                    >
-                      {getBotName(trade.bot_id)}
-                    </Typography>
-                  </TableCell>
                   <TableCell align="right">
                     {trade.profit_loss !== undefined ? (
                       <PnLDisplay
@@ -396,7 +381,7 @@ export const RecentTradesTable: React.FC<RecentTradesTableProps> = ({
         }
         maxWidth="xs"
       >
-        {selectedTrade && <TradeDetail trade={selectedTrade} getBotName={getBotName} />}
+        {selectedTrade && <TradeDetail trade={selectedTrade} />}
       </Modal>
     </Box>
   )

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState } from 'react'
 import {
   Box,
   Typography,
@@ -28,7 +28,7 @@ import {
 } from '@mui/icons-material'
 import { useQueryClient } from '@tanstack/react-query'
 import { useActivityLogs } from '@/hooks/useActivityLogs'
-import { useBots } from '@/hooks/useBots'
+import { useBook } from '@/hooks/useBook'
 import { EmptyState } from '@/components/common'
 
 const levelColors: Record<string, 'default' | 'info' | 'warning' | 'error' | 'success'> = {
@@ -54,7 +54,6 @@ const ActivityLogPanel = () => {
 
   const [level, setLevel] = useState('')
   const [category, setCategory] = useState('')
-  const [botId, setBotId] = useState('')
   const [dateRange, setDateRange] = useState('all')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
@@ -64,19 +63,19 @@ const ActivityLogPanel = () => {
   const { data, isLoading } = useActivityLogs({
     level,
     category,
-    botId,
     dateRange,
     search,
     page,
     pageSize,
   })
-
-  const { data: bots } = useBots()
-
-  const getBotName = useCallback(
-    (id: string) => bots?.find((b) => b.id === id)?.name || id.slice(0, 8),
-    [bots]
-  )
+  const book = useBook()
+  const fixtureLogs = book.activity.filter((log) => {
+    if (level && log.level !== level) return false
+    if (category && log.category !== category) return false
+    if (search && !log.message.toLowerCase().includes(search.toLowerCase())) return false
+    return true
+  })
+  const logs = page === 1 ? [...fixtureLogs, ...(data?.logs ?? [])] : data?.logs ?? []
 
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ['activity-logs'] })
@@ -139,16 +138,6 @@ const ActivityLogPanel = () => {
           </Select>
         </FormControl>
 
-        <FormControl size="small" sx={{ minWidth: 110 }}>
-          <InputLabel>Bot</InputLabel>
-          <Select value={botId} label="Bot" onChange={(e) => { setBotId(e.target.value); setPage(1) }}>
-            <MenuItem value="">All Bots</MenuItem>
-            {bots?.map((b) => (
-              <MenuItem key={b.id} value={b.id}>{b.name}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-
         <FormControl size="small" sx={{ minWidth: 100 }}>
           <InputLabel>Date</InputLabel>
           <Select value={dateRange} label="Date" onChange={(e) => { setDateRange(e.target.value); setPage(1) }}>
@@ -175,10 +164,10 @@ const ActivityLogPanel = () => {
             <Skeleton key={i} variant="rectangular" height={40} sx={{ mb: 0.5 }} />
           ))}
         </Box>
-      ) : !data?.logs?.length ? (
+      ) : logs.length === 0 ? (
         <EmptyState
           title="No activity logs"
-          message="Activity will appear here as your bots trade and system events occur"
+          message="Veto codes and book events will appear here."
           variant="empty-search"
           sx={{ minHeight: 200 }}
         />
@@ -193,11 +182,11 @@ const ActivityLogPanel = () => {
                   <TableCell sx={{ fontWeight: 600, minWidth: 70 }}>Level</TableCell>
                   <TableCell sx={{ fontWeight: 600, minWidth: 80 }}>Category</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>Message</TableCell>
-                  <TableCell sx={{ fontWeight: 600, minWidth: 80 }}>Bot</TableCell>
+                  <TableCell sx={{ fontWeight: 600, minWidth: 120 }}>Reason</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {data.logs.map((log) => (
+                {logs.map((log) => (
                   <React.Fragment key={log.id}>
                     <TableRow
                       hover
@@ -246,7 +235,7 @@ const ActivityLogPanel = () => {
                       </TableCell>
                       <TableCell>
                         <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
-                          {log.bot_id ? getBotName(log.bot_id) : '—'}
+                          {log.reason_code ?? '—'}
                         </Typography>
                       </TableCell>
                     </TableRow>
@@ -271,9 +260,9 @@ const ActivityLogPanel = () => {
 
           <TablePagination
             component="div"
-            count={data.pagination.totalItems}
-            page={data.pagination.page - 1}
-            rowsPerPage={data.pagination.pageSize}
+            count={(data?.pagination.totalItems ?? 0) + (page === 1 ? fixtureLogs.length : 0)}
+            page={(data?.pagination.page ?? page) - 1}
+            rowsPerPage={data?.pagination.pageSize ?? pageSize}
             onPageChange={handleChangePage}
             onRowsPerPageChange={handleChangeRowsPerPage}
             rowsPerPageOptions={[10, 25, 50, 100]}

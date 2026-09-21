@@ -75,6 +75,11 @@ export interface Trade {
   slippage?: number
   client_order_id?: string
   reason?: string
+  /** Book fields. Present once a trade is recorded by the runtime. */
+  reason_code?: string
+  shortfall?: number
+  regime?: MarketRegime
+  session?: BookSession
 }
 
 export interface Position {
@@ -92,6 +97,16 @@ export interface Position {
   closed_at?: string
   is_open: boolean
   entry_indicator?: string
+  /** Book fields. Null until the runtime records a decision. */
+  score?: number | null
+  veto_code?: string | null
+  regime?: MarketRegime | null
+  expected_cost?: number | null
+  realized_cost?: number | null
+  hold_minutes?: number | null
+  atr_stop?: number | null
+  target_price?: number | null
+  open_stop_risk?: number | null
 }
 
 export interface SummaryStats {
@@ -359,6 +374,7 @@ export interface ActivityLogEntry {
   details?: Record<string, any>
   bot_id?: string
   user_id?: string
+  reason_code?: string
 }
 
 export interface ActivityLogFilters {
@@ -375,3 +391,96 @@ export interface ActivityLogPagination {
   totalItems: number
   totalPages: number
 }
+
+// =====================
+// Book contract (UI-first reboot)
+// =====================
+
+export type ThrottleStage = 'normal' | 'half' | 'stop_new' | 'locked'
+export type MarketRegime = 'trend' | 'range' | 'compression' | 'transition'
+export type AccountMode = 'paper' | 'shadow' | 'min_size_live'
+export type BookSession = 'rth' | 'extended' | 'overnight'
+export type BookScenario = 'normal' | 'empty' | 'stale' | 'locked'
+
+export interface KillSwitchState {
+  halted: boolean
+  locked: boolean
+}
+
+export interface DataFreshness {
+  stale: boolean
+  age_seconds: number | null
+  feed: 'sip' | 'iex'
+}
+
+export interface BookSummary {
+  equity: number
+  marked_daily_pnl: number
+  marked_daily_pnl_pct: number
+  daily_lock_pct: number
+  throttle_stage: ThrottleStage
+  open_stop_risk: number
+  open_stop_risk_pct: number
+  position_count: number
+  max_positions: number
+  regime: MarketRegime | null
+  data_freshness: DataFreshness
+  kill_switch: KillSwitchState
+}
+
+export interface UniverseFilters {
+  top_n: number
+  min_price: number
+  max_spread_bps: number
+}
+
+export interface UniverseMember {
+  symbol: string
+  price: number
+  dollar_volume: number
+  spread_bps: number
+}
+
+export interface UniverseSnapshot {
+  as_of: string
+  filters: UniverseFilters
+  members: UniverseMember[]
+}
+
+export interface SessionSettings {
+  rth_enabled: boolean
+  extended_hours: boolean
+}
+
+export interface FeedSettings {
+  primary: 'sip'
+  iex_diagnostic: boolean
+}
+
+export interface RiskCaps {
+  risk_per_trade_pct: number
+  max_open_stop_risk_pct: number
+  soft_throttle_pct: number
+  stop_new_risk_pct: number
+  hard_daily_lock_pct: number
+  max_positions: number
+  single_name_notional_pct: number
+  min_score: number
+  min_target_r: number
+  cost_multiple: number
+}
+
+export interface FeeTier {
+  version: string
+  refreshed_at: string
+}
+
+export type BookSocketEvent =
+  | 'trade_executed'
+  | 'position_updated'
+  | 'price_update'
+  | 'market_status_changed'
+  | 'risk_event'
+  | 'regime_changed'
+  | 'data_health'
+  | 'universe_updated'

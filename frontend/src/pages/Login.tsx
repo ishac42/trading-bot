@@ -57,7 +57,7 @@ const Login = () => {
             Trading Bot
           </Typography>
           <Typography variant="body1" color="text.secondary">
-            Sign in to manage your trading bots, monitor positions, and track
+            Sign in to configure the book, monitor positions, and track
             performance.
           </Typography>
         </Box>

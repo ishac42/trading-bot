@@ -1,123 +1,26 @@
-import { useState, useCallback } from 'react'
-import { Box, Typography, Alert, Snackbar, Button } from '@mui/material'
+import { Alert, Box, Button, FormControl, InputLabel, MenuItem, Select, Typography } from '@mui/material'
 import { useNavigate } from 'react-router-dom'
 import LinkIcon from '@mui/icons-material/Link'
-import { AccountSummary, SummaryCards, ActiveBotsList, RecentTradesTable } from '@/components/dashboard'
-import { useBots, usePauseBot, useStopBot, useStartBot } from '@/hooks/useBots'
-import { useRecentTrades } from '@/hooks/useRecentTrades'
-import { useSummaryStats } from '@/hooks/useSummaryStats'
+import { AccountSummary, RecentTradesTable } from '@/components/dashboard'
+import BookSummary from '@/components/dashboard/BookSummary'
+import BookControls from '@/components/settings/BookControls'
+import { useBook } from '@/hooks/useBook'
 import { useRealtimeDashboard } from '@/hooks/useRealtimeDashboard'
 import { useSettings } from '@/hooks/useSettings'
 import { useAccount } from '@/hooks/useAccount'
+import { BOOK_USE_MOCK, setBookScenario } from '@/mocks/bookStore'
+import type { BookScenario } from '@/types'
 
-/**
- * Dashboard Page
- *
- * Main overview page combining:
- * - Summary Cards (Total P&L, Active Bots, Open Positions)
- * - Active Bots List with action buttons
- * - Recent Trades Table
- *
- * All data is fetched via React Query hooks and updated
- * in real-time via WebSocket subscriptions.
- */
 const Dashboard = () => {
   const navigate = useNavigate()
-
-  // Data hooks
-  const { data: bots, isLoading: botsLoading, error: botsError } = useBots()
-  const { data: trades, isLoading: tradesLoading, error: tradesError } = useRecentTrades(10)
-  const { data: stats, isLoading: statsLoading, error: statsError } = useSummaryStats()
-
+  const book = useBook()
   const { settings, isLoading: settingsLoading } = useSettings()
   const { data: account, isLoading: accountLoading } = useAccount()
 
-  // Real-time updates
   useRealtimeDashboard()
-
-  // Action mutations
-  const pauseBot = usePauseBot()
-  const stopBot = useStopBot()
-  const startBot = useStartBot()
-
-  // UI state
-  const [actionLoading, setActionLoading] = useState<string | null>(null)
-  const [snackbar, setSnackbar] = useState<{
-    open: boolean
-    message: string
-    severity: 'success' | 'error'
-  }>({ open: false, message: '', severity: 'success' })
-
-  const showSnackbar = useCallback(
-    (message: string, severity: 'success' | 'error' = 'success') => {
-      setSnackbar({ open: true, message, severity })
-    },
-    []
-  )
-
-  const handleCloseSnackbar = useCallback(() => {
-    setSnackbar((prev) => ({ ...prev, open: false }))
-  }, [])
-
-  // Bot action handlers
-  const handlePauseBot = useCallback(
-    async (botId: string) => {
-      setActionLoading(botId)
-      try {
-        await pauseBot.mutateAsync(botId)
-        showSnackbar('Bot paused successfully')
-      } catch {
-        showSnackbar('Failed to pause bot', 'error')
-      } finally {
-        setActionLoading(null)
-      }
-    },
-    [pauseBot, showSnackbar]
-  )
-
-  const handleResumeBot = useCallback(
-    async (botId: string) => {
-      setActionLoading(botId)
-      try {
-        await startBot.mutateAsync(botId)
-        showSnackbar('Bot resumed successfully')
-      } catch {
-        showSnackbar('Failed to resume bot', 'error')
-      } finally {
-        setActionLoading(null)
-      }
-    },
-    [startBot, showSnackbar]
-  )
-
-  const handleStopBot = useCallback(
-    async (botId: string) => {
-      setActionLoading(botId)
-      try {
-        await stopBot.mutateAsync(botId)
-        showSnackbar('Bot stopped successfully')
-      } catch {
-        showSnackbar('Failed to stop bot', 'error')
-      } finally {
-        setActionLoading(null)
-      }
-    },
-    [stopBot, showSnackbar]
-  )
-
-  const handleBotClick = useCallback(
-    (botId: string) => {
-      navigate(`/bots/${botId}`)
-    },
-    [navigate]
-  )
-
-  // Show error if all data sources fail
-  const hasError = botsError && tradesError && statsError
 
   return (
     <Box>
-      {/* Page Title */}
       <Typography
         variant="h4"
         component="h1"
@@ -130,15 +33,6 @@ const Dashboard = () => {
         Dashboard
       </Typography>
 
-      {/* Error Banner */}
-      {hasError && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          Failed to load dashboard data. Please check your connection and try
-          again.
-        </Alert>
-      )}
-
-      {/* Link Account Banner */}
       {!settingsLoading && !accountLoading && !settings?.broker?.is_connected && !account?.account_number && (
         <Alert
           severity="warning"
@@ -148,7 +42,7 @@ const Dashboard = () => {
               color="inherit"
               size="small"
               startIcon={<LinkIcon />}
-              onClick={() => navigate('/settings')}
+              onClick={() => navigate('/settings?section=broker')}
             >
               Link Account
             </Button>
@@ -158,50 +52,38 @@ const Dashboard = () => {
         </Alert>
       )}
 
-      {/* Account Overview */}
+      {BOOK_USE_MOCK && (
+        <FormControl size="small" sx={{ mb: 2, minWidth: 180 }}>
+          <InputLabel id="book-scenario-label">Preview state</InputLabel>
+          <Select
+            labelId="book-scenario-label"
+            label="Preview state"
+            value={book.scenario}
+            onChange={(event) => setBookScenario(event.target.value as BookScenario)}
+          >
+            <MenuItem value="normal">Normal book</MenuItem>
+            <MenuItem value="empty">Empty book</MenuItem>
+            <MenuItem value="stale">Stale feed</MenuItem>
+            <MenuItem value="locked">Daily lock</MenuItem>
+          </Select>
+        </FormControl>
+      )}
+
       <Box sx={{ mb: { xs: 3, md: 4 } }}>
         <AccountSummary />
       </Box>
 
-      {/* Summary Cards */}
       <Box sx={{ mb: { xs: 3, md: 4 } }}>
-        <SummaryCards stats={stats} isLoading={statsLoading} />
+        <BookSummary summary={book.summary} />
       </Box>
 
-      {/* Active Bots Section */}
       <Box sx={{ mb: { xs: 3, md: 4 } }}>
-        <ActiveBotsList
-          bots={bots}
-          isLoading={botsLoading}
-          onPauseBot={handlePauseBot}
-          onResumeBot={handleResumeBot}
-          onStopBot={handleStopBot}
-          onBotClick={handleBotClick}
-          actionLoading={actionLoading}
-        />
+        <BookControls killSwitch={book.summary.kill_switch} compact />
       </Box>
 
-      {/* Recent Trades Table */}
       <Box sx={{ mb: { xs: 3, md: 4 } }}>
-        <RecentTradesTable trades={trades} isLoading={tradesLoading} />
+        <RecentTradesTable trades={book.trades} isLoading={false} />
       </Box>
-
-      {/* Snackbar for action feedback */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={4000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert
-          onClose={handleCloseSnackbar}
-          severity={snackbar.severity}
-          variant="filled"
-          sx={{ width: '100%' }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
     </Box>
   )
 }

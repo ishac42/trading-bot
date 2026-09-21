@@ -1,17 +1,30 @@
-import { useState } from 'react'
-import { Box, Typography, CircularProgress, Paper } from '@mui/material'
+import { useSearchParams } from 'react-router-dom'
+import { Box, CircularProgress, Paper, Typography } from '@mui/material'
 import SettingsSidebar from '@/components/settings/SettingsSidebar'
-import type { SettingsSection } from '@/components/settings/SettingsSidebar'
+import { isSettingsSection } from '@/components/settings/settingsSections'
+import type { SettingsSection } from '@/components/settings/settingsSections'
 import BrokerConnection from '@/components/settings/BrokerConnection'
 import NotificationSettings from '@/components/settings/NotificationSettings'
 import DisplayPreferences from '@/components/settings/DisplayPreferences'
 import AppearanceSettings from '@/components/settings/AppearanceSettings'
 import DataManagement from '@/components/settings/DataManagement'
 import ActivityLogPanel from '@/components/settings/ActivityLogPanel'
+import UniverseFilters from '@/components/settings/UniverseFilters'
+import UniversePreview from '@/components/settings/UniversePreview'
+import SessionSettings from '@/components/settings/SessionSettings'
+import FeedSettings from '@/components/settings/FeedSettings'
+import RiskCaps from '@/components/settings/RiskCaps'
+import AccountModeSettings from '@/components/settings/AccountModeSettings'
 import { useSettings } from '@/hooks/useSettings'
+import { useBook } from '@/hooks/useBook'
+
+const CONTROL_SECTIONS: SettingsSection[] = ['universe', 'session', 'feed', 'risk', 'mode', 'appearance', 'activity']
 
 const Settings = () => {
-  const [activeSection, setActiveSection] = useState<SettingsSection>('broker')
+  const [params, setParams] = useSearchParams()
+  const sectionParam = params.get('section')
+  const activeSection: SettingsSection = isSettingsSection(sectionParam) ? sectionParam : 'universe'
+  const book = useBook()
 
   const {
     settings,
@@ -28,8 +41,13 @@ const Settings = () => {
     resetSettings,
   } = useSettings()
 
+  const setSection = (section: SettingsSection) => {
+    setParams({ section })
+  }
+
   const renderSection = () => {
-    if (isLoading) {
+    const needsBrokerSettings = !CONTROL_SECTIONS.includes(activeSection)
+    if (needsBrokerSettings && isLoading) {
       return (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
           <CircularProgress />
@@ -38,6 +56,21 @@ const Settings = () => {
     }
 
     switch (activeSection) {
+      case 'universe':
+        return (
+          <>
+            <UniverseFilters filters={book.universe} />
+            <UniversePreview snapshot={book.snapshot} />
+          </>
+        )
+      case 'session':
+        return <SessionSettings session={book.session} />
+      case 'feed':
+        return <FeedSettings feed={book.feed} feeTier={book.feeTier} />
+      case 'risk':
+        return <RiskCaps risk={book.risk} killSwitch={book.summary.kill_switch} />
+      case 'mode':
+        return <AccountModeSettings mode={book.mode} />
       case 'broker':
         return (
           <BrokerConnection
@@ -91,7 +124,7 @@ const Settings = () => {
           gap: 3,
         }}
       >
-        <SettingsSidebar active={activeSection} onChange={setActiveSection} />
+        <SettingsSidebar active={activeSection} onChange={setSection} />
 
         <Paper sx={{ flex: 1, p: { xs: 2, sm: 3 }, minHeight: 400 }}>
           {renderSection()}
