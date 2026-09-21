@@ -1,5 +1,7 @@
 # Feb 16 Implementation Plan — Backend Phases 9–15
 
+> **Historical status of the retired multi-bot backend** (through Phase 13). Do not extend `BotRunner`, the signal vote, or bot CRUD from this file. New work follows [`ARCHITECTURE.md`](./ARCHITECTURE.md) and [`UI_IMPLEMENTATION_PLAN.md`](./UI_IMPLEMENTATION_PLAN.md).
+
 ## Current Status Summary
 
 **Date**: February 16, 2026  

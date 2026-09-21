@@ -1,918 +1,329 @@
-# Trading Bot - UI Implementation Plan
+# Implementation Plan — UI First (Architecture Reboot)
 
-## Overview
-This plan outlines the step-by-step implementation of the UI/UX design from `UI_DESIGN.md`. The approach is agile, sprint-based, and focuses on delivering working UI components incrementally.
+> **Sequencing for the living product.** Source of truth: [`ARCHITECTURE.md`](./ARCHITECTURE.md).
+>
+> This plan replaces the old Sprint 0–12 UI plan (bot factory, indicator forms, “create a bot” MVP). It also supersedes backend phases that treat `bots` CRUD, indicator votes, and `bot_status_changed` as the product. `Feb16_Implementation_plan.md` is a historical status of that retired system.
+>
+> **UI first:** freeze screens, navigation, and TypeScript contracts against mocks before any trading-runtime or new settings API work. The backend is written to those contracts. Do not extend `pages/Bots.tsx`, `CreateBot.tsx`, `EditBot.tsx`, `components/bots/`, `ActiveBotsList`, or `BotCard` as the live path.
 
-**Sprint Length**: 1 week  
-**Approach**: Component-first, then screens, then integration
-
----
-
-## Sprint 0: Foundation & Setup (Week 1)
-
-**Goal**: Set up development environment and basic project structure
-
-### Project Setup
-- [ ] Initialize React + TypeScript project with Vite
-- [ ] Install core dependencies:
-  - React 18+
-  - TypeScript
-  - React Router DOM
-  - @tanstack/react-query
-  - Material-UI (MUI) or Tailwind CSS
-  - TradingView Lightweight Charts
-  - axios
-  - socket.io-client
-- [ ] Set up project structure:
-  ```
-  frontend/src/
-  ├── components/
-  │   ├── common/
-  │   ├── layout/
-  │   └── features/
-  ├── pages/
-  ├── hooks/
-  ├── services/
-  ├── types/
-  ├── utils/
-  └── styles/
-  ```
-- [ ] Configure TypeScript paths/aliases
-- [ ] Set up ESLint and Prettier
-- [ ] Configure Vite for development
-- [ ] Set up environment variables (.env)
-
-### Basic Infrastructure
-- [ ] Create API service client (`services/api.ts`)
-- [ ] Set up React Query client
-- [ ] Create WebSocket service (`services/websocket.ts`)
-- [ ] Set up routing structure (`App.tsx`)
-- [ ] Create basic layout component (`components/layout/Layout.tsx`)
-- [ ] Create theme configuration (MUI theme or Tailwind config)
-
-**Definition of Done**:
-- ✅ Project runs with `npm run dev`
-- ✅ Can navigate between placeholder pages
-- ✅ API client configured (even if mocked)
-- ✅ Basic layout structure in place
+**Last updated:** 2026-09-21  
+**Approach:** one book, configured from Settings. Screens and typed mocks first; control-plane API second; trading runtime last.
 
 ---
 
-## Sprint 1: Design System & Common Components (Week 1-2)
+## Why UI first
 
-**Goal**: Build reusable components and design system foundation
+The chassis already renders a broker dashboard: auth, layout, Settings (broker and prefs), Positions, Trades, Analytics, Socket.IO. The reboot changes what those screens *mean*. Building the runtime first would lock the API to the retired bot model (`useBots`, start/pause/stop, bot filters, bot comparison).
 
-### Design System
-- [ ] Create color palette (primary, success, warning, error, neutral)
-- [ ] Set up typography system
-- [ ] Define spacing scale
-- [ ] Create theme file (if using MUI) or Tailwind config
+Order of work:
 
-### Common Components
-- [ ] **StatusBadge** component
-  - Props: status (running/paused/stopped/error)
-  - Color coding: Green/Yellow/Gray/Red
-  - Icon support
-- [ ] **P&LDisplay** component
-  - Props: amount, percentage, showSign
-  - Color: Green (positive), Red (negative)
-  - Format: +$1,234.56 (+2.5%)
-- [ ] **Card** component (base card with consistent styling)
-- [ ] **Button** variants (primary, secondary, danger)
-- [ ] **Input** component with validation styling
-- [ ] **Select/Dropdown** component
-- [ ] **Modal/Dialog** component
-- [ ] **LoadingSpinner** component
-- [ ] **EmptyState** component
+1. **Product UI on mocks** — nav, Settings → Universe, book dashboard, rebound Positions / Trades / Analytics.
+2. **Control-plane API** — only the shapes the new UI already calls.
+3. **Trading runtime** — session clock, SIP stream, regime, score, risk authority. Out of the UI-first cut except as states the screens already display.
 
-### Layout Components
-- [ ] **TopBar** component
-  - Market status indicator
-  - User menu
-  - Connection status
-- [ ] **Navigation** component
-  - Main nav items (Dashboard, Bots, Positions, Trades, Analytics)
-  - Active state highlighting
-  - Responsive (mobile menu)
-- [ ] **Layout** wrapper (combines TopBar + Navigation + content)
-
-### Testing
-- [ ] Unit tests for StatusBadge
-- [ ] Unit tests for P&LDisplay
-- [ ] Visual regression tests (optional, with Storybook)
-
-**Definition of Done**:
-- ✅ All common components render correctly
-- ✅ Design system documented
-- ✅ Components are reusable and typed
-- ✅ Storybook setup (optional but recommended)
+Research console, crypto, extended hours, and shorts stay off. See architecture “First-production defaults.”
 
 ---
 
-## Sprint 2: Dashboard Screen (Week 2-3)
+## What already exists (keep the chassis)
 
-**Goal**: Build the main dashboard with summary cards, bot list, and recent trades
+| Keep | Rebind or remove in the UI-first cut |
+|---|---|
+| React 18, MUI, TanStack Query, React Router, Axios, Socket.IO client | Primary nav item **Bots**; Theme Preview as a product tab |
+| `Login`, Google OAuth, `ProtectedRoute`, `Layout`, `TopBar` | `/bots`, `/bots/create`, `/bots/:botId/edit` as product routes |
+| Settings page shell, `SettingsSidebar`, Broker / Notifications / Display / Appearance / Data / Activity | Settings living only under the avatar |
+| Positions, Trades, Analytics page shells, tables, charts, close-position | Bot column, bot filter, “performance by bot”, `BotComparisonChart` / `BotComparisonTable` as first-class |
+| `PnLDisplay`, `Card`, `EmptyState`, `ErrorBoundary`, connection indicator | `StatusBadge` meanings tied to running/paused/stopped bots |
+| Dashboard account summary and recent trades table | `ActiveBotsList`, `BotCard`, Create New Bot, `useBots` / start / pause / stop on Dashboard |
 
-### Summary Cards Component
-- [ ] **SummaryCard** component
-  - Props: title, value, change, icon
-  - Responsive grid layout
-- [ ] Create three summary cards:
-  - Total P&L card
-  - Active Bots count card
-  - Open Positions card
-- [ ] Connect to API (or mock data initially)
-
-### Active Bots Section
-- [ ] **BotCard** component
-  - Bot name, status badge
-  - Action buttons (Pause/Resume/Stop)
-  - Symbols list
-  - Capital, P&L, indicators, metrics
-  - Click handler for navigation
-- [ ] **ActiveBotsList** component
-  - Renders list of BotCards
-  - "Create New Bot" button
-  - Empty state
-- [ ] Connect to API for bot data
-- [ ] Implement action buttons (start/stop/pause)
-
-### Recent Trades Table
-- [ ] **TradeTable** component (simplified version)
-  - Columns: Time, Symbol, Type, Qty, Price, Bot, P&L
-  - Row click handler
-  - "View All" link
-- [ ] **TradeRow** component
-  - Individual trade row
-  - Color coding for P&L
-- [ ] Limit to 5-10 most recent trades
-- [ ] Connect to API
-
-### Dashboard Page
-- [ ] **Dashboard** page component
-  - Combines all sections
-  - Responsive layout (grid)
-  - Loading states
-  - Error handling
-- [ ] Set up React Query hooks:
-  - `useBots()` - Fetch active bots
-  - `useRecentTrades()` - Fetch recent trades
-  - `useSummaryStats()` - Fetch summary stats
-
-### Real-time Updates (Basic)
-- [ ] Set up WebSocket connection
-- [ ] Listen for trade events
-- [ ] Update trades table in real-time
-- [ ] Update summary cards in real-time
-
-**Definition of Done**:
-- ✅ Dashboard displays all sections
-- ✅ Data loads from API (or mock)
-- ✅ Real-time updates work
-- ✅ Responsive on mobile/tablet
-- ✅ Loading and error states handled
+`App.tsx` today mounts Bots, Create, and Edit. `Navigation.tsx` lists Dashboard, Bots, Positions, Trades, Analytics, Theme Preview. `SettingsSidebar` starts at Broker. Those three files are the first cutover.
 
 ---
 
-## Sprint 3: Bots Management Pages (Week 3-4)
+## Phase UI-0 — Freeze the frontend contract
 
-**Goal**: Build bot list page and bot creation/edit forms
+**Goal:** TypeScript types and mock fixtures are the API the later backend must match. No new routes, no runtime.
 
-### Bots List Page
-- [ ] **BotsList** page component
-- [ ] **Filters** component
-  - Status filter tabs (All, Running, Paused, Stopped)
-  - Search input
-- [ ] Enhanced **BotCard** (reuse from Dashboard)
-  - Edit button
-  - Delete button with confirmation
-  - More detailed information
-- [ ] Filter logic implementation
-- [ ] Search functionality
-- [ ] Empty state when no bots
-- [ ] React Query hooks:
-  - `useBots()` with filters
-  - `useDeleteBot()` mutation
-  - `useUpdateBotStatus()` mutation
+### Types (extend `frontend/src/types`, do not add bot-factory fields)
 
-### Bot Form Components
-- [ ] **BotForm** component (base form wrapper)
-- [ ] **BasicInfoSection** component
-  - Bot name input
-  - Capital allocation input
-  - Trading frequency input
-  - Validation
-- [ ] **SymbolSelector** component
-  - Multi-select chips/tags
-  - Symbol search/autocomplete
-  - Add/remove symbols
-  - Symbol validation
-- [ ] **TradingWindowSection** component
-  - Start time picker
-  - End time picker
-  - Timezone display (EST)
-  - Validation
-- [ ] **IndicatorConfigSection** component
-  - Indicator checkbox list
-  - Dynamic parameter inputs per indicator
-  - Add/remove indicators
-  - Parameter validation
-- [ ] **RiskManagementSection** component
-  - Stop loss input
-  - Take profit input
-  - Max position size input
-  - Max daily loss input
-  - Max concurrent positions input
-  - Tooltips for each field
-  - Validation
+- **Book summary** — equity, marked daily P&L (realized + unrealized + estimated flatten cost), progress vs the 2% lock, throttle stage (`normal` / `half` / `stop_new` / `locked`), open stop-risk, position count (max 3), regime, data freshness, kill-switch state.
+- **Universe** — filters (liquidity rank or top-N dollar volume, price floor, RTH spread band) plus a point-in-time membership snapshot (symbol, price, dollar volume, spread). Not a free-typed symbol list.
+- **Session** — RTH enabled (default on), extended hours (default off, separate flag).
+- **Feed** — `sip` required; `iex` marked diagnostic only.
+- **Risk caps** — the ladder from the architecture (0.25% per trade, 0.75% open risk, −1% / −1.5% / −2% daily). UI may edit only inside hard caps.
+- **Account mode** — `paper` | `shadow` | `min_size_live`. One mode at a time.
+- **Position row** — existing price/P&L fields plus score, veto code, regime, expected vs realized cost, hold time, ATR stop and target. No `bot_id` as a product column.
+- **Trade row** — reason / veto code, implementation shortfall, regime, session. No bot column as a product field.
+- **Analytics** — expectancy, turnover, CVaR, cost / gross alpha, splits by regime, session, and asset. No bot-comparison series.
+- **WebSocket events** — `trade_executed`, `position_updated`, `price_update`, `market_status_changed`, `risk_event`, `regime_changed`, `data_health`, `universe_updated`. `bot_status_changed` is not a product event.
 
-### Create/Edit Bot Pages
-- [ ] **CreateBot** page component
-  - Uses BotForm
-  - Form sections (collapsible)
-  - Save/Cancel buttons
-  - Form validation
-  - Success/error handling
-- [ ] **EditBot** page component
-  - Pre-fills form with bot data
-  - Same form as CreateBot
-  - Update mutation
-- [ ] React Query hooks:
-  - `useCreateBot()` mutation
-  - `useUpdateBot()` mutation
-  - `useBot(id)` query
+### Mocks
 
-### Form Enhancements
-- [ ] Real-time validation
-- [ ] Auto-save to localStorage (optional)
-- [ ] Unsaved changes warning on cancel
-- [ ] Form state management (React Hook Form recommended)
+- One fixture module the new hooks read while `USE_MOCK` (or a book-specific flag) is on.
+- Include empty, stale-feed, and daily-lock states so Dashboard and Settings can render them before the API exists.
+- Activity log fixture rows may include veto codes (`NO_TRADE_COST`, `NO_TRADE_STALE_DATA`).
 
-**Definition of Done**:
-- ✅ Can create a new bot via form
-- ✅ Can edit existing bot
-- ✅ Can filter/search bots
-- ✅ Can delete bot with confirmation
-- ✅ Form validation works
-- ✅ All form sections functional
+**Done when:** new screens can be built against these types with no import from `useBots` and no call to `/api/bots`.
 
 ---
 
-## Sprint 4: Positions Page (Week 4-5)
+## Phase UI-1 — Navigation and route cutover
 
-**Goal**: Build positions page with real-time price updates
+**Goal:** The app no longer offers a bot factory. Settings is a primary destination.
 
-### Positions Table
-- [ ] **PositionsTable** component
-  - Columns: Symbol, Bot, Qty, Entry, Current, P&L, Stop Loss
-  - Sortable columns
-  - Row click handler
-- [ ] **PositionRow** component
-  - Individual position row
-  - Color coding (green/red for P&L)
-  - Real-time price updates
-- [ ] Sorting logic
-- [ ] Responsive table (mobile: card view)
+### `frontend/src/components/layout/Navigation.tsx`
 
-### Filters & Summary
-- [ ] **PositionFilters** component
-  - Bot filter dropdown
-  - Symbol filter dropdown
-  - Sort options
-- [ ] **PositionsSummary** component
-  - Total positions count
-  - Total value
-  - Total P&L
-- [ ] Filter logic implementation
+Primary tabs, in order:
 
-### Position Detail Panel
-- [ ] **PositionDetail** component (modal or side panel)
-  - Full position information
-  - Entry/current price
-  - P&L breakdown
-  - Stop loss/take profit visualization
-  - Duration calculation
-- [ ] **PositionChart** component
-  - TradingView Lightweight Charts integration
-  - Entry point marker
-  - Current price line
-  - Stop loss/take profit lines
-- [ ] "Close Position" button
-  - Confirmation dialog
-  - Close position mutation
+`Dashboard · Positions · Trades · Analytics · Settings`
 
-### Positions Page
-- [ ] **Positions** page component
-  - Combines table, filters, summary
-  - Position detail modal
-  - Loading/error states
-- [ ] React Query hooks:
-  - `usePositions()` query
-  - `useClosePosition()` mutation
+- Remove **Bots**.
+- Remove **Theme Preview** from the product tab list. Keep `/theme-preview` as a hidden route (direct URL only).
+- Mobile drawer uses the same list.
+- Highlight Settings when `location.pathname` starts with `/settings` (query `section` must not break the tab).
 
-### Real-time Updates
-- [ ] WebSocket: Listen for position updates
-- [ ] Update position prices in real-time
-- [ ] Update P&L calculations
-- [ ] Smooth number transitions
+### `frontend/src/App.tsx`
 
-**Definition of Done**:
-- ✅ Positions table displays all open positions
-- ✅ Real-time price updates work
-- ✅ Position detail panel shows full info
-- ✅ Can close position manually
-- ✅ Filters and sorting work
-- ✅ Responsive design
+- Delete product routes for `Bots`, `CreateBot`, and `EditBot`.
+- Replace them with redirects:
+  - `/bots` → `/settings?section=universe`
+  - `/bots/create` → `/settings?section=universe`
+  - `/bots/:botId/edit` → `/settings?section=universe`
+- Avatar menu may still link to `/settings`. It is not the only way in.
+
+### Affordances to remove from reachable UI
+
+- Dashboard “Create New Bot”, start / pause / stop.
+- Any remaining link to `/bots/create` or edit.
+
+Leave the retired page files in the tree until Phase UI-8 cleanup, but nothing in nav or dashboard may import them.
+
+**Done when:** a user cannot create, edit, start, pause, or stop a bot from the UI, and Settings is in the tab bar on desktop and mobile.
 
 ---
 
-## Sprint 5: Trade History Page (Week 5-6)
+## Phase UI-2 — Settings is the control plane
 
-**Goal**: Build trade history with filtering and analysis
+**Goal:** Universe, session, feed, risk, and account mode live in Settings, ahead of personalization. This replaces the Bots factory. Persist to the Phase UI-0 mocks (local state or mock mutation). Do not call bot endpoints.
 
-### Trade History Table
-- [ ] Enhanced **TradeTable** component
-  - Full columns: Time, Symbol, Type, Qty, Price, Bot, P&L
-  - Pagination
-  - Sortable columns
-  - Row click handler
-- [ ] **TradeRow** component (enhanced)
-  - Full trade information
-  - Color coding
-  - Indicator values display (optional)
+### `SettingsSidebar` section order
 
-### Filters Section
-- [ ] **TradeFilters** component
-  - Date range picker (Today, All Time, Custom)
-  - Bot filter dropdown
-  - Symbol filter dropdown
-  - Type filter (Buy/Sell/All)
-  - Apply/Clear buttons
-- [ ] Filter logic implementation
-- [ ] URL query params for filters (shareable links)
+1. **Universe** (new, default when `?section=universe` or when opening Settings from a bot redirect)
+2. **Session**
+3. **Feed**
+4. **Risk**
+5. **Account mode**
+6. Broker Connection (existing)
+7. Notifications, Display, Appearance, Data Management, Activity Log (existing)
 
-### Trade Detail Modal
-- [ ] **TradeDetailModal** component
-  - Full trade information
-  - Indicator values at trade time
-  - Related position link (if applicable)
-  - Order ID and status
-  - Timestamp details
+Extend `SettingsSection` and `Settings.tsx` so the query param selects the section on load (needed for the redirects).
 
-### Trade Analysis Section
-- [ ] **TradeAnalysis** component
-  - Summary statistics (total trades, win rate, avg P&L)
-  - P&L chart (line/bar chart)
-  - Performance by symbol breakdown
-  - Performance by bot breakdown
-- [ ] **P&LChart** component
-  - Line chart showing cumulative P&L
-  - Time range selector
-  - Chart library integration (Recharts or similar)
+### New components under `frontend/src/components/settings/`
 
-### Trade History Page
-- [ ] **TradeHistory** page component
-  - Combines table, filters, analysis
-  - Trade detail modal
-  - Export CSV button
-  - Pagination
-  - Loading/error states
-- [ ] React Query hooks:
-  - `useTrades()` query with filters
-  - `useTradeStats()` query
-- [ ] **Export CSV** functionality
-  - Generate CSV from filtered trades
-  - Download file
+| Component | Behavior |
+|---|---|
+| `UniverseFilters` | Top-N / dollar-volume rule, price floor (default ≥ $5), RTH spread band (default ~10–15 bps). Save and reset. No symbol text field, no per-name capital. |
+| `UniversePreview` | Table of the current snapshot: symbol, price, dollar volume, spread. Empty and loading states. |
+| `SessionSettings` | RTH on by default. Extended hours is a separate switch, default off, with copy that it is not the live path. |
+| `FeedSettings` | SIP as the production feed. IEX shown as diagnostic only, not a peer choice for research or live. |
+| `RiskCaps` | Read-only hard caps and editable values clamped inside them. Show the 2% flatten-and-lock, −1.5% stop-new, −1% throttle. |
+| `BookControls` | Kill switch, Flatten, Lock / Unlock. Flatten and Lock open a confirmation dialog. Buttons call mock mutations and surface success/error toasts. |
+| `AccountMode` | Paper / shadow / min-size live as a single selection. Copy states that two modes must not size the same buying power. |
+| Fee tier | Version label plus Refresh on Broker or Feed. Never a hardcoded number presented as live. |
 
-**Definition of Done**:
-- ✅ Trade history table displays all trades
-- ✅ Filters work correctly
-- ✅ Pagination works
-- ✅ Trade detail modal shows full info
-- ✅ Analysis charts render
-- ✅ CSV export works
-- ✅ Responsive design
+Existing Broker test, notifications, display, appearance, export/clear, and activity log stay. Activity log may show veto-code rows from the mock; drop any bot-name filter that depends on `useBots` (`ActivityLogPanel` currently calls it).
+
+**Done when:** Settings → Universe shows filters and a membership preview; session, feed, risk, and mode render with the architecture defaults; destructive book actions confirm; personalization sections still work.
 
 ---
 
-## Sprint 6: Analytics Page (Week 6-7)
+## Phase UI-3 — Dashboard is the book
 
-**Goal**: Build analytics dashboard with performance metrics
+**Goal:** `/` shows book risk, regime, freshness, and kill-switch state. It does not show “how many bots are running.”
 
-### Performance Overview
-- [ ] **PerformanceOverview** component
-  - Total P&L display
-  - Win rate display
-  - Sharpe ratio (if available)
-  - Other key metrics
-- [ ] **CumulativeP&LChart** component
-  - Line chart over time
-  - Time range selector
-  - Interactive tooltips
+### Replace `ActiveBotsList` on `Dashboard.tsx`
 
-### Bot Performance Comparison
-- [ ] **BotComparisonChart** component
-  - Bar chart comparing bots
-  - Metrics: P&L, win rate, trades count
-  - Interactive (click to filter)
-- [ ] **BotComparisonTable** component (alternative view)
-  - Table format for comparison
-  - Sortable columns
+Summary cards (reuse `SummaryCards` / `PnLDisplay` / `Card`):
 
-### Symbol Performance
-- [ ] **SymbolPerformance** component
-  - Table or chart showing performance by symbol
-  - P&L per symbol
-  - Win rate per symbol
-  - Trade count per symbol
+- Book equity
+- Marked daily P&L vs the 2% lock (include a staged throttle indicator)
+- Open stop-risk
+- Open positions (count, cap 3)
+- Regime
+- Data freshness (age; stale is a visible fail-closed state)
+- Kill-switch / lock state, with the same Flatten / Lock actions as Settings (or a link into Risk)
 
-### Analytics Page
-- [ ] **Analytics** page component
-  - Combines all analytics sections
-  - Responsive layout
-  - Loading/error states
-- [ ] React Query hooks:
-  - `useAnalytics()` query
-  - `useBotPerformance()` query
-  - `useSymbolPerformance()` query
+### Recent trades
 
-**Definition of Done**:
-- ✅ Analytics page displays all metrics
-- ✅ Charts render correctly
-- ✅ Data loads from API
-- ✅ Interactive charts work
-- ✅ Responsive design
+Keep `RecentTradesTable`. Drop the Bot column. Row click still opens trade detail.
+
+### Data
+
+- New `useBookSummary()` (and reuse account + recent trades hooks).
+- `useRealtimeDashboard` stops subscribing to `bot_status_changed`. It may subscribe to `risk_event`, `regime_changed`, and `data_health` once Phase UI-7 lands; until then, mock refetch is enough.
+
+Loading, error, empty book, stale feed, and locked-day states are required, not optional polish.
+
+**Done when:** Dashboard has no bot list, no start/pause/stop, and the lock / stale / empty states render from fixtures.
 
 ---
 
-## Sprint 7: Real-time Updates & WebSocket Integration (Week 7)
+## Phase UI-4 — Positions rebound to the book
 
-**Goal**: Complete real-time functionality across all pages
+**Goal:** Same page, book-scoped. File: `pages/Positions.tsx` and `components/positions/`.
 
-### WebSocket Service Enhancement
-- [ ] **WebSocketService** enhancement
-  - Connection management
-  - Reconnection logic (exponential backoff)
-  - Connection status tracking
-  - Event type handling
-- [ ] WebSocket event types:
-  - `trade_executed`
-  - `position_updated`
-  - `bot_status_changed`
-  - `price_update`
-  - `market_status_changed`
+- Remove the bot filter (`PositionFilters`) and bot column. `Positions.tsx` and `PositionDetail` must not call `useBots`.
+- Table columns to add: regime, score, veto, hold time, ATR stop, target. Keep symbol, qty, entry, current, P&L.
+- Summary bar stays (count, value, P&L) and adds aggregate open stop-risk when the summary payload has it.
+- Detail panel: expected vs realized cost, hold time, ATR stop/target lines on `PositionChart`. Close position and its confirmation stay.
+- Symbol filter and sort stay.
 
-### Real-time Hooks
-- [ ] **useWebSocket** hook
-  - Connection management
-  - Event subscription
-  - Auto-reconnect
-- [ ] **useRealtimeTrades** hook
-  - Subscribe to trade events
-  - Update React Query cache
-- [ ] **useRealtimePositions** hook
-  - Subscribe to position updates
-  - Update React Query cache
-- [ ] **useRealtimeBotStatus** hook
-  - Subscribe to bot status changes
-  - Update React Query cache
-
-### Visual Feedback
-- [ ] **ConnectionStatus** indicator
-  - Show connected/disconnected state
-  - Reconnecting animation
-- [ ] **NewTradeFlash** animation
-  - Flash effect when new trade appears
-- [ ] **SmoothNumberTransition** component
-  - Animate number changes
-  - Use for P&L, prices, etc.
-
-### Integration Across Pages
-- [ ] Dashboard: Real-time updates for all sections
-- [ ] Bots page: Real-time status updates
-- [ ] Positions page: Real-time price updates
-- [ ] Trades page: Real-time new trades
-- [ ] Analytics: Real-time metric updates (optional)
-
-**Definition of Done**:
-- ✅ WebSocket connects and stays connected
-- ✅ All pages update in real-time
-- ✅ Reconnection works automatically
-- ✅ Visual feedback for updates
-- ✅ Connection status visible
+**Done when:** positions render from the book fixture with no bot identifier on screen, and close-position still confirms.
 
 ---
 
-## Sprint 8: Charts & Visualizations (Week 8)
+## Phase UI-5 — Trades rebound
 
-**Goal**: Integrate TradingView charts and enhance visualizations
+**Goal:** History explains why a name did or did not trade. Files: `pages/Trades.tsx`, `components/trades/`.
 
-### TradingView Lightweight Charts Integration
-- [ ] **PriceChart** component wrapper
-  - TradingView Lightweight Charts setup
-  - Configuration (theme, layout)
-  - Data formatting
-- [ ] **ChartWithIndicators** component
-  - Price line
-  - Indicator overlays (RSI, MACD, etc.)
-  - Buy/sell markers
-  - Time range selector
-- [ ] **PositionChart** component (for Positions page)
-  - Entry point marker
-  - Current price line
-  - Stop loss/take profit lines
-  - Historical price data
+- Remove bot filter and bot column. `Trades.tsx` and `TradeDetailModal` must not call `useBots`.
+- Add reason / veto code, shortfall, regime, session.
+- Date range, symbol, side, pagination, URL query params, and CSV export stay.
+- Trade analysis: drop “performance by bot.” Keep symbol breakdown. Regime and session splits can be a compact table if the fixture includes them; otherwise leave a labeled empty state until Analytics (Phase UI-6) owns the charts.
 
-### Chart Components for Analytics
-- [ ] **P&LChart** component (Recharts or similar)
-  - Line chart for cumulative P&L
-  - Bar chart for daily P&L
-  - Time range selector
-- [ ] **PerformanceBarChart** component
-  - Bot comparison bars
-  - Symbol performance bars
-- [ ] **WinRateChart** component
-  - Pie or donut chart for win/loss ratio
-
-### Chart Enhancements
-- [ ] Interactive tooltips
-- [ ] Zoom and pan functionality
-- [ ] Export chart as image (optional)
-- [ ] Responsive chart sizing
-- [ ] Loading states for charts
-
-**Definition of Done**:
-- ✅ TradingView charts render correctly
-- ✅ Indicator overlays work
-- ✅ Buy/sell markers display
-- ✅ Analytics charts render
-- ✅ Charts are responsive
-- ✅ Interactive features work
+**Done when:** the trades table and detail modal show veto, shortfall, regime, and session, and CSV export still downloads the filtered set.
 
 ---
 
-## Sprint 9: Polish & UX Enhancements (Week 9)
+## Phase UI-6 — Analytics without bot comparison
 
-**Goal**: Improve user experience and polish the UI
+**Goal:** `pages/Analytics.tsx` measures expectancy and cost, not runners.
 
-### Loading States
-- [ ] **SkeletonLoaders** for all major components
-  - Table skeleton
-  - Card skeleton
-  - Chart skeleton
-- [ ] Replace spinners with skeletons where appropriate
+Remove from the page (and from the analytics barrel if nothing else imports them):
 
-### Error Handling
-- [ ] **ErrorBoundary** component
-  - Catch React errors
-  - Display user-friendly error message
-- [ ] **ErrorMessage** component
-  - Consistent error display
-  - Retry functionality
-- [ ] Error states for all pages
-- [ ] Network error handling
-- [ ] API error messages
+- `BotComparisonChart`
+- `BotComparisonTable`
+- `useBotPerformance` as a page dependency
 
-### Notifications & Feedback
-- [ ] **Toast/Notification** system
-  - Success messages (bot created, trade executed)
-  - Error messages
-  - Warning messages
-- [ ] **ConfirmationDialogs** for destructive actions
-  - Delete bot
-  - Close position
-  - Stop bot
-- [ ] **Tooltips** for help text
-  - Risk management fields
-  - Indicator parameters
-  - Action buttons
+Add sections, mocked:
 
-### Form Improvements
-- [ ] **FormWizard** for bot creation (optional, for mobile)
-  - Step-by-step form
-  - Progress indicator
-  - Save progress
-- [ ] **Auto-save** functionality
-  - Save form to localStorage
-  - Restore on page reload
-- [ ] **Form validation** improvements
-  - Real-time validation
-  - Clear error messages
-  - Field-level errors
+- Expectancy
+- Turnover
+- CVaR
+- Cost / gross alpha
+- Splits by regime, session, and asset
 
-### Accessibility
-- [ ] **Keyboard navigation** for all interactive elements
-- [ ] **ARIA labels** for screen readers
-- [ ] **Focus indicators** visible
-- [ ] **Color contrast** meets WCAG standards
-- [ ] **Alt text** for icons/images
+Keep `PerformanceOverview` and `CumulativePnLChart` where the metrics still apply. Time-range control stays.
 
-**Definition of Done**:
-- ✅ All loading states implemented
-- ✅ Error handling comprehensive
-- ✅ Notifications work
-- ✅ Forms are user-friendly
-- ✅ Accessibility improved
-- ✅ UI feels polished
+**Done when:** Analytics loads from the book analytics fixture and has no bot comparison chart or table.
 
 ---
 
-## Sprint 10: Responsive Design & Mobile (Week 10)
+## Phase UI-7 — Realtime product events
 
-**Goal**: Ensure app works well on all screen sizes
+**Goal:** Socket.IO stays; payloads become book, risk, regime, and data health.
 
-### Mobile Navigation
-- [ ] **MobileMenu** component
-  - Hamburger menu
-  - Slide-out navigation
-  - Bottom navigation (optional)
-- [ ] **ResponsiveNavigation** component
-  - Desktop: horizontal nav
-  - Mobile: hamburger menu
+- `useWebSocket` event union includes `risk_event`, `regime_changed`, `data_health`, `universe_updated`.
+- Remove `useRealtimeBotStatus` from product hooks (or stop exporting it). Dashboard, Positions, Trades, and Settings → Universe update the React Query cache from the new events.
+- Connection indicator stays (`ConnectionStatusIndicator`).
+- A new risk or lock event updates the dashboard throttle/lock card without a full reload.
+- `universe_updated` refreshes the membership preview.
 
-### Responsive Layouts
-- [ ] **Dashboard** mobile layout
-  - Stack cards vertically
-  - Simplified bot cards
-  - Collapsible sections
-- [ ] **Bots page** mobile layout
-  - Full-width bot cards
-  - Simplified filters
-- [ ] **Positions page** mobile layout
-  - Card-based position view (instead of table)
-  - Swipe actions (optional)
-- [ ] **Trades page** mobile layout
-  - Card-based trade view
-  - Simplified filters
-- [ ] **Bot form** mobile layout
-  - Full-width inputs
-  - Step-by-step wizard (optional)
-  - Bottom action buttons
-
-### Touch Interactions
-- [ ] **Touch-friendly** button sizes (min 44x44px)
-- [ ] **Swipe gestures** (optional)
-  - Swipe to delete
-  - Swipe to refresh
-- [ ] **Pull to refresh** (optional)
-
-### Tablet Optimization
-- [ ] **Tablet layouts** for all pages
-  - 2-column layouts where appropriate
-  - Optimized spacing
-  - Touch-friendly controls
-
-**Definition of Done**:
-- ✅ App works on mobile (320px+)
-- ✅ App works on tablet (768px+)
-- ✅ App works on desktop (1024px+)
-- ✅ Navigation works on all sizes
-- ✅ Forms are usable on mobile
-- ✅ Touch interactions work
+**Done when:** with a mock socket (or a tiny dev emitter), a `risk_event` and a `universe_updated` change the visible dashboard and universe preview, and no screen listens for `bot_status_changed`.
 
 ---
 
-## Sprint 11: Testing & Quality Assurance (Week 11)
+## Phase UI-8 — Polish on the new surfaces only
 
-**Goal**: Comprehensive testing and bug fixes
+Do not polish Create/Edit bot forms.
 
-### Unit Testing
-- [ ] Test all common components
-  - StatusBadge
-  - P&LDisplay
-  - BotCard
-  - TradeTable
-- [ ] Test custom hooks
-  - useWebSocket
-  - useRealtimeTrades
-  - useBots
-- [ ] Test utility functions
-- [ ] Achieve 80%+ code coverage
+- Skeletons for dashboard cards, universe preview, positions, and trades.
+- Confirmation dialogs for Flatten, Lock, and Close position.
+- Tooltips on risk-cap fields (what the hard cap is, what throttle does).
+- Toasts for settings save and book actions.
+- Keyboard focus and labels on new Settings controls and primary nav, including the mobile drawer.
+- Responsive: Settings section select already exists for small screens; Universe preview becomes a card list under `md`. Dashboard cards stack. Positions and trades keep the existing card-vs-table behavior.
+- Delete unused product imports: bot pages and bot components once grep shows no route or page imports them. Theme preview route stays.
 
-### Integration Testing
-- [ ] Test page flows
-  - Create bot → Start bot → See trades
-  - View positions → Close position
-  - Filter trades → Export CSV
-- [ ] Test API integration
-  - Mock API responses
-  - Test error scenarios
-- [ ] Test WebSocket integration
-  - Connection/disconnection
-  - Event handling
-  - Reconnection
-
-### End-to-End Testing
-- [ ] Set up E2E testing (Playwright or Cypress)
-- [ ] Test critical user flows:
-  - Create and start a bot
-  - Monitor dashboard
-  - View positions
-  - View trade history
-- [ ] Test on different browsers
-
-### Performance Testing
-- [ ] **Lighthouse** audit
-  - Performance score > 90
-  - Accessibility score > 90
-  - Best practices score > 90
-- [ ] **Bundle size** optimization
-  - Code splitting
-  - Lazy loading
-  - Tree shaking
-- [ ] **Render performance**
-  - React DevTools Profiler
-  - Optimize re-renders
-  - Memoization where needed
-
-### Bug Fixes
-- [ ] Fix all critical bugs
-- [ ] Fix all high-priority bugs
-- [ ] Document known issues
-
-**Definition of Done**:
-- ✅ All tests passing
-- ✅ Code coverage > 80%
-- ✅ E2E tests passing
-- ✅ Performance targets met
-- ✅ No critical bugs
+**Done when:** the five primary tabs and Settings sections are usable at ~320px, ~768px, and desktop, with loading, error, empty, stale, and locked states.
 
 ---
 
-## Sprint 12: Documentation & Deployment Prep (Week 12)
+## Phase API — Control plane follows the UI
 
-**Goal**: Prepare for production deployment
+Sequenced in [`POST_UI_IMPLEMENTATION_PLAN.md`](./POST_UI_IMPLEMENTATION_PLAN.md) Cut A. Start only after Phases UI-0 through UI-2 have frozen types (UI-3–UI-6 may proceed on mocks in parallel). Implement to the frontend types, not to `BACKEND_IMPLEMENTATION_PLAN.md`.
 
-### Documentation
-- [ ] **Component documentation**
-  - Storybook stories for all components
-  - Props documentation
-  - Usage examples
-- [ ] **API integration guide**
-  - How to connect to backend
-  - API endpoint documentation
-  - WebSocket event documentation
-- [ ] **User guide** (optional)
-  - How to create a bot
-  - How to monitor trading
-  - How to view positions
-- [ ] **README** updates
-  - Setup instructions
-  - Development guide
-  - Deployment guide
+| UI already calls | Backend adds or rebinds |
+|---|---|
+| `GET/PUT` universe filters + snapshot | Settings category `universe`; `universe_snapshots` |
+| Session, feed, mode, risk caps | Settings categories `session`, `feed`, `mode`, `risk` |
+| Flatten / lock / unlock | Book commands; strategy cannot bypass them |
+| `GET /api/summary` | Book equity, marked P&L, throttle, open-risk, regime, freshness, kill state — not bot counts |
+| Positions and trades list/detail | Book fields (score, veto, regime, cost, shortfall, hold). Old `bot_id` rows stay archive and are not a product filter |
+| `WS /ws` | Add `risk_event`, `regime_changed`, `data_health`, `universe_updated`; stop emitting `bot_status_changed` as a product event |
+| Existing broker, notifications, display, export, activity | Keep |
 
-### Production Build
-- [ ] **Build optimization**
-  - Production build configuration
-  - Environment variables setup
-  - Asset optimization
-- [ ] **Docker setup** (if needed)
-  - Dockerfile for frontend
-  - docker-compose configuration
-- [ ] **CI/CD pipeline**
-  - Build on push
-  - Run tests
-  - Deploy to staging/production
+Retired live contract, after the UI no longer calls it: `GET/POST /api/bots`, `GET/PUT/DELETE /api/bots/{id}`, `POST /api/bots/{id}/start|stop|pause`. During cutover those routes return **410** (or are unmounted). They must not remain the way to put risk on.
 
-### Environment Configuration
-- [ ] **Environment variables**
-  - API URL
-  - WebSocket URL
-  - Feature flags
-- [ ] **Configuration files**
-  - Production config
-  - Staging config
-  - Development config
+`bots` table and `Bot` ORM stay archive or a thin cutover alias. They do not own capital, symbols, or indicators.
 
-### Final Polish
-- [ ] **Code review** and cleanup
-- [ ] **Performance** final check
-- [ ] **Accessibility** audit
-- [ ] **Browser compatibility** testing
-  - Chrome, Firefox, Safari, Edge
-- [ ] **Cross-platform** testing
-  - Windows, Mac, Linux
-  - iOS, Android (if applicable)
-
-**Definition of Done**:
-- ✅ Documentation complete
-- ✅ Production build works
-- ✅ CI/CD pipeline set up
-- ✅ Ready for deployment
-- ✅ All quality checks passed
+**Done when:** flipping the UI mock flag off renders Dashboard, Settings → Universe, Positions, and Trades from the API without a `/api/bots` call.
 
 ---
 
-## Component Dependency Map
+## Phase Runtime — after the control UI
+
+Not part of the UI-first cut. Full sequence: [`POST_UI_IMPLEMENTATION_PLAN.md`](./POST_UI_IMPLEMENTATION_PLAN.md) Cut B (Cut C is research, later). Start the wired runtime only after the control-plane API matches the screens:
+
+`SessionClock → MarketData (SIP stream) → Features (closed 5m/15m) → Regime → StrategySelector → Score → CostVeto → RiskEngine → Execution → Protect → Reconcile → Telemetry`
+
+Salvage lifespan restore, `client_order_id`, reconciler, unfilled-sell-stays-open, emergency flatten, activity-log reasons, and the paper-vs-live URL guard.
+
+Do not extend `TradingEngine` / `BotRunner`, majority vote, entry-indicator tracking, or the IEX poll loop as the engine. Quarantine those tests so they cannot become the new contract.
+
+A research console (trials, gates, promotion) is a later UI. It does not restore Bots.
+
+---
+
+## Dependency order
 
 ```
-Common Components (Sprint 1)
+UI-0 types + mocks
     ↓
-Layout Components (Sprint 1)
+UI-1 nav + redirects          UI-2 Settings (Universe first)
+    ↓                              ↓
+UI-3 Dashboard    UI-4 Positions    UI-5 Trades    UI-6 Analytics
     ↓
-Dashboard Components (Sprint 2)
-    ├── Uses: StatusBadge, P&LDisplay, BotCard, TradeTable
-    └── Depends on: API service, WebSocket
+UI-7 WebSocket product events
     ↓
-Bots Management (Sprint 3)
-    ├── Uses: BotCard, StatusBadge, Form components
-    └── Depends on: Dashboard components
+UI-8 polish + delete unused bot UI
     ↓
-Positions (Sprint 4)
-    ├── Uses: StatusBadge, P&LDisplay, Charts
-    └── Depends on: WebSocket, API
+API control plane matching the frozen types
     ↓
-Trade History (Sprint 5)
-    ├── Uses: TradeTable, Charts, Filters
-    └── Depends on: API, Chart library
-    ↓
-Analytics (Sprint 6)
-    ├── Uses: Charts, P&LDisplay
-    └── Depends on: API, Chart library
+Post-UI plan: control plane, then runtime (see POST_UI_IMPLEMENTATION_PLAN.md)
 ```
 
----
-
-## Technical Decisions
-
-### UI Library
-- **Recommendation**: Material-UI (MUI) for faster development
-- **Alternative**: Tailwind CSS for more customization
-- **Decision needed**: Choose one
-
-### State Management
-- **React Query**: Server state (API data)
-- **React Context**: Global UI state (theme, user)
-- **Local State**: Component-specific state (forms)
-
-### Form Management
-- **Recommendation**: React Hook Form
-- **Alternative**: Formik
-- **Decision needed**: Choose one
-
-### Chart Library
-- **TradingView Lightweight Charts**: Price charts
-- **Recharts**: Analytics charts
-- **Alternative**: Chart.js, Victory
-
-### Testing
-- **Unit Tests**: Vitest or Jest
-- **E2E Tests**: Playwright or Cypress
-- **Component Tests**: React Testing Library
+UI-3 through UI-6 can proceed in parallel once UI-0 types exist. UI-2 should land before UI-1 redirects, or the redirect target is an empty section.
 
 ---
 
-## Risk Mitigation
+## Out of scope
 
-### High-Risk Items
-1. **TradingView Charts Integration**: Complex API, test early
-2. **WebSocket Real-time Updates**: Can be tricky, implement incrementally
-3. **Form Complexity**: Bot creation form is complex, use form library
-4. **Performance**: Real-time updates can cause performance issues, optimize early
-
-### Mitigation Strategies
-- Start with simple chart implementation, enhance later
-- Test WebSocket with mock server first
-- Use proven form library (React Hook Form)
-- Profile and optimize as you build
-- Use React.memo and useMemo strategically
+- Research console, walk-forward UI, parameter grids
+- Crypto, extended-hours trading, equity shorts
+- Redis in the UI or as a documented trading dependency
+- Reviving indicator checkboxes, per-bot capital, trading windows, or symbol multi-select
+- Rewriting `UI_DESIGN.md` in this pass (architecture wins where they disagree)
 
 ---
 
-## Success Criteria
+## Done for the UI-first cut
 
-### MVP (Sprint 1-5)
-- ✅ Can create a bot via UI
-- ✅ Can view bots and their status
-- ✅ Can see recent trades
-- ✅ Can view open positions
-- ✅ Basic real-time updates work
-
-### Enhanced (Sprint 6-8)
-- ✅ All pages functional
-- ✅ Real-time updates across all pages
-- ✅ Charts display correctly
-- ✅ Responsive design works
-
-### Production Ready (Sprint 9-12)
-- ✅ All tests passing
-- ✅ Performance targets met
-- ✅ Accessibility standards met
-- ✅ Documentation complete
-- ✅ Ready for deployment
-
----
-
-## Notes
-
-- **Start Simple**: Build basic versions first, enhance later
-- **Reuse Components**: Don't duplicate, create reusable components
-- **Test as You Build**: Write tests alongside code
-- **Iterate on Design**: Adjust based on usability testing
-- **Performance First**: Optimize early, don't accumulate debt
-- **Mobile First**: Consider mobile from the start, not as afterthought
-
----
-
-**Last Updated**: [Current Date]  
-**Version**: 1.0
+- Primary nav is Dashboard, Positions, Trades, Analytics, Settings.
+- `/bots`, create, and edit redirect to Settings → Universe.
+- Universe filters and a membership preview work on mocks, with no typed symbol list.
+- Dashboard shows book risk, regime, freshness, and kill/lock state, including stale and locked fixtures.
+- Positions, Trades, and Analytics do not show a bot column, bot filter, or bot comparison.
+- Flatten, Lock, and Close position confirm before acting.
+- No product screen imports `useBots` or listens for `bot_status_changed`.
+- Frontend types are the contract for the following API phase.

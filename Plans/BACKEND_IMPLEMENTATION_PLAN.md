@@ -1,6 +1,10 @@
 # Backend Implementation Plan
 
-> Based on `ARCHITECTURE.md` and the frontend's API contracts (`api.ts`, `types/index.ts`, hooks, and mock data).
+> **Retired as sequencing.** This document describes the old multi-bot API (bots CRUD, indicator votes, `bot_status_changed`). Do not implement new work from these phases.
+>
+> Living architecture: [`ARCHITECTURE.md`](./ARCHITECTURE.md). Living sequence: [`UI_IMPLEMENTATION_PLAN.md`](./UI_IMPLEMENTATION_PLAN.md) — UI and typed mocks first, then a control-plane API that matches those types. The `bots` routes in this plan are not the live contract.
+
+> Historical note: originally based on the pre-reboot frontend contracts (`api.ts`, `types/index.ts`, hooks, and mock data).
 
 ---
 

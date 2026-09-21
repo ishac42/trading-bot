@@ -503,7 +503,7 @@ Retired product files (do not extend as the live path): `pages/Bots.tsx`, `Creat
 
 Code as of the last mainline (early March 2026) still implements the **retired** product: `BotRunner` poll, IEX 1m bars, indicator vote / entry-indicator tracking, percent risk, Bots nav and factory forms. Auth, settings (broker/prefs), positions/trades pages, reconciler, `client_order_id`, and emergency close are chassis to keep.
 
-This file is the architecture to implement against. Implementation sequencing lives elsewhere; do not revive sprint plans that assume N bots.
+This file is the architecture to implement against. Implementation sequencing is [`UI_IMPLEMENTATION_PLAN.md`](./UI_IMPLEMENTATION_PLAN.md) (UI first), then [`POST_UI_IMPLEMENTATION_PLAN.md`](./POST_UI_IMPLEMENTATION_PLAN.md) (control-plane API, then runtime, then research). Do not revive sprint plans that assume N bots.
 
 ### WebSocket
 
