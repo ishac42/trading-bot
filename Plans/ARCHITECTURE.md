@@ -1,632 +1,530 @@
-# Auto Trading Bot - Architecture & Technology Stack
+# Trader Bot — Architecture (Reboot)
 
-> **📌 Maintenance Note**: This document must stay synchronized with `ARCHITECTURE_DIAGRAMS.html` and `SYSTEM_ARCHITECTURE_DIAGRAMS.md`. See `ARCHITECTURE_MAINTENANCE.md` for sync guidelines.
+> **Source of truth for the living product.** This document describes the agreed reboot: one hybrid strategy, one book, and a configured universe. It supersedes the multi-bot / first-hours / indicator-workshop architecture that the rest of `Plans/` and the current UI still describe.
+>
+> Product bible: research day-trading spec (minutes-to-hours hybrid). Do **not** treat `ENTRY_INDICATOR_TRACKING.md`, `SIGNAL_STRATEGY_UPGRADE.md`, or the sprint/implementation plans as architecture for new work.
+>
+> Visual companions (`ARCHITECTURE_DIAGRAMS.html`, `SYSTEM_ARCHITECTURE_DIAGRAMS.md`) still draw the retired multi-bot system. Update them to match this file; until then, this document wins.
 
 ## Overview
-A multi-bot stock trading system that uses technical indicators to execute trades during the first few hours of market open. Each bot can be independently configured with different indicators, trading frequency, capital allocation, and risk management parameters.
 
-## Technology Stack
+This is a **single-book, regime-aware day-trading system** on a FastAPI / React / PostgreSQL / Alpaca chassis. Live trading is **one hybrid strategy** scanning a **configured universe** of liquid U.S. names. The user does not create N independent bots, type symbols per bot, pick oscillators, or allocate capital per runner.
+
+The old product was an indicator workshop: each bot had its own symbols, indicators, capital, trading window, and start/pause/stop. That model is retired. Configuration that used to live on Bots moves to **Settings**, especially a **Universe** section (filters, not a typed symbol list).
+
+Optimize for **survival → execution correctness → positive net expectancy → risk-adjusted return → consistency → scale**. Daily profit is not a goal.
+
+| Layer | Default | Job |
+|---|---|---|
+| Execution / risk | 1-minute + live quotes | Spread, slippage, stops, fills |
+| Signals | Closed 5-minute bars | Entries, exits, setups |
+| Regime | Closed 15-minute bars | Trend vs range vs compression |
+| Context | 60-minute (optional) | Major-trend veto only |
+
+Typical hold 15–120 minutes; hard max 4 hours. First production cut: **U.S. equities, regular hours only**, SIP-quality stock data, ~1× gross. Extended hours and crypto stay off until their own cost/session gates pass.
+
+## Product model
+
+### Live system (one book)
+
+- **One hybrid selector**, not a vote of contradictory indicators and not “first BUY indicator wins.”
+- **One portfolio risk engine** is the authority. Strategy may request; risk decides size and permission.
+- **One universe** of liquid U.S. names, configured by filters (dollar volume, price floor, RTH spread), then scanned on a stream. Users do not type per-bot tickers.
+- **One account mode** at a time on the live book: paper / shadow / min-size live. Two live parameter sets must not independently size the same buying power.
+- **Kill switch, flatten, and lock** are first-class controls, not optional bot flags.
+
+A named **strategy version** (locked parameter set + hash + promotion state `research → paper → shadow → live`) may exist for research and promotion. It is not a user-built “bot” and is not the risk unit.
+
+### What Settings is for
+
+Settings is the control-plane home for how the single book is allowed to trade:
+
+| Settings section | Role |
+|---|---|
+| **Universe** (new, replaces Bots factory) | Membership rules: liquid U.S. names (target top 50–100 by recent dollar volume), price ≥ ~$5, RTH spread ~10–15 bps, point-in-time snapshot preview. Not a free-typed symbol list per runner. |
+| Broker | Per-user Alpaca credentials, paper vs live URL guard, connection test |
+| Feed | SIP required for research and for any production path that uses VWAP, volume, or spread. IEX is a degraded diagnostic feed only. |
+| Session | RTH on by default; extended hours a separate flag, off |
+| Risk | Research-default ladder, editable only inside hard caps; kill / flatten / lock |
+| Account mode | Paper / shadow / min-size live |
+| Fees | Versioned fee-tier refresh (never hardcoded) |
+| Existing prefs | Notifications, display, appearance, data export/clear, activity log — keep |
+
+### What happens to Bots (create / edit / list)
+
+| Current surface (as shipped) | Reboot fate |
+|---|---|
+| Primary nav **Bots** (`/bots`) | **Removed.** List of runners with search, status tabs, and start/pause/stop is not the product. |
+| **Create bot** (`/bots/create`) | **Removed.** No form for name, capital, symbols, indicator checkboxes, percent SL/TP, or trading window. |
+| **Edit bot** (`/bots/:botId/edit`) | **Removed.** Same factory form does not come back as “edit strategy.” |
+| Dashboard **Active bots** cards / start-pause-stop | **Removed.** Dashboard shows book risk, regime, kill-switch state, open-risk, data freshness — not “how many bots are running.” |
+| `GET/POST /api/bots`, start/pause/stop | **Retired as the live contract.** During cutover, routes may 410 or redirect; they must not remain the way to put risk on. |
+| `bots` table / `Bot` ORM | **Not the risk unit.** Historical rows and voter fills are **archive** only. Do not train or validate the new system on old fills. A thin row may linger as a UI alias for a strategy version so old URLs do not 500 during cutover; it must not own capital, symbols, or indicators. |
+
+Cutover UX: `/bots`, `/bots/create`, and `/bots/:id/edit` redirect to **Settings → Universe** (and Settings is reachable from primary nav, not only the avatar menu).
+
+### Navigation
+
+**Current (retired product):** `Dashboard · Bots · Positions · Trades · Analytics` (+ Theme Preview). Settings lives only under the user avatar.
+
+**Target primary nav:** `Dashboard · Positions · Trades · Analytics · Settings`
+
+- **Settings** moves into the primary tab bar because universe, session, feed, and risk caps are core product, not account chrome.
+- Avatar menu may still deep-link to Settings.
+- Theme Preview stays a hidden/dev route, not a product tab.
+- No Bots tab. No “create bot” affordance.
+
+## Technology stack
+
+Chassis stays. The trading brain, risk contract, market-data path, and Bots UX do not.
 
 ### Backend
-- **Framework**: FastAPI (Python 3.11+)
-  - High performance async framework
-  - Automatic API documentation (Swagger/OpenAPI)
-  - WebSocket support for real-time updates
-  - Type validation with Pydantic
 
-- **Database**: PostgreSQL
-  - Relational database for bot configurations, trade history
-  - ACID compliance for financial data integrity
-  - JSON columns for flexible indicator/risk config storage
-
-- **ORM**: SQLAlchemy
-  - Database abstraction layer
-  - Migration support with Alembic
-
-- **Trading API**: Alpaca Trade API
-  - Commission-free stock trading
-  - Paper trading for testing
-  - Real-time market data via WebSocket
-  - REST API for order execution
-
-- **Technical Indicators**: pandas-ta
-  - Comprehensive indicator library (RSI, MACD, Bollinger Bands, etc.)
-  - Built on pandas/numpy for performance
-  - Easy to extend with custom indicators
-
-- **Real-time Data**: Alpaca WebSocket Streams
-  - Live price updates
-  - Trade execution confirmations
-  - Account updates
-
-- **Caching/Queue**: Redis (optional)
-  - Real-time data caching
-  - Pub/sub for distributed systems
-  - Rate limiting
+- **Framework**: FastAPI (Python 3.11+), Pydantic, structlog, request IDs, OpenAPI
+- **Database**: PostgreSQL — ACID book, orders, fills, features, regimes, vetoes, research trials
+- **ORM**: SQLAlchemy + Alembic
+- **Broker**: Alpaca Trade API — paper/live URL guard, per-user credentials, REST for snapshots/commands/recovery, **streams for market data**
+- **Features**: small complementary stack (EMA, VWAP, RSI, ATR, ADX, volume/OBV, spread / order-flow proxy). pandas-ta math may be reused; **signal mapping must be rewritten**. SMA is slow context only.
+- **Auth**: Google OAuth + JWT (already shipped; not a future item)
+- **Redis**: present in Compose only. **Not in the trading path** until a real pub/sub need appears. Do not document it as architecture.
 
 ### Frontend
-- **Framework**: React 18+ with TypeScript
-  - Component-based UI
-  - Type safety
-  - Modern hooks API
 
-- **UI Library**: Material-UI (MUI) or Tailwind CSS
-  - Pre-built components
-  - Responsive design
-  - Professional look
+- **React 18 + TypeScript**, MUI, TanStack Query, React Router
+- **Charts**: TradingView Lightweight Charts / Recharts (positions and analytics)
+- **Realtime**: existing Socket.IO client against `/ws` — keep broadcast; events become book/risk/regime/data-health, not `bot_status_changed`
 
-- **Charts**: TradingView Lightweight Charts or Recharts
-  - Real-time price charts
-  - Technical indicator overlays
-  - Performance optimized
+### Infrastructure
 
-- **State Management**: React Query / TanStack Query
-  - Server state management
-  - Automatic caching and refetching
-  - Optimistic updates
+- Docker Compose: API (Uvicorn), UI (Vite build / Nginx), PostgreSQL
+- Alpaca is the first venue adapter. Crypto adapter stays dark until fee/liquidity gates pass.
+- Cloud/process notes (health checks, env-specific config, GitHub Actions) are unchanged in spirit.
 
-- **WebSocket Client**: socket.io-client
-  - Real-time dashboard updates
-  - Live trade notifications
-  - Position updates
-  - Bot status changes
-  - Market status updates
-
-### Infrastructure & Deployment
-- **Containerization**: Docker & Docker Compose
-  - Consistent development/production environments
-  - Easy deployment
-  - Separate containers for frontend, backend, database, and cache
-
-- **Deployment Architecture**:
-  - **Frontend Container**: React app (Vite build) served via Nginx
-  - **Backend Container**: FastAPI app running on Uvicorn
-  - **Database Container**: PostgreSQL with persistent volumes
-  - **Cache Container**: Redis (optional but recommended)
-  - **External Services**: Alpaca API (cloud-hosted)
-
-- **Cloud Platform**: AWS / GCP / Azure
-  - EC2/Compute Engine for application server
-  - RDS/Cloud SQL for PostgreSQL
-  - ElastiCache/Cloud Memorystore for Redis (optional)
-  - Load balancer for horizontal scaling
-
-- **Process Management**: 
-  - Systemd (Linux) for service management
-  - PM2 (Node.js process manager for frontend if needed)
-  - Container orchestration (Kubernetes/ECS) for production
-  - Health checks and auto-restart on failure
-
-## System Architecture
+## System architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                         Frontend (React)                     │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │  Dashboard   │  │ Bot Config   │  │  Trade Log   │      │
-│  │   (Charts)   │  │     UI       │  │   Viewer     │      │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              │ HTTP/WebSocket
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    FastAPI Backend                           │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │  Bot Router  │  │ Trade Router │  │ Market Data  │      │
-│  │  (CRUD)      │  │  (History)   │  │   Router     │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-│                              │                              │
-│                    ┌─────────┴─────────┐                   │
-│                    │  Trading Engine   │                   │
-│                    │  (Core Logic)     │                   │
-│                    └─────────┬─────────┘                   │
-└──────────────────────────────┼──────────────────────────────┘
-                               │
-                ┌──────────────┼──────────────┐
-                │              │              │
-                ▼              ▼              ▼
-        ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
-        │  PostgreSQL │ │   Alpaca    │ │    Redis    │
-        │  Database   │ │     API     │ │   (Cache)   │
-        └─────────────┘ └─────────────┘ └─────────────┘
+│ Control UI (React)                                          │
+│  Dashboard · Positions · Trades · Analytics · Settings      │
+│  Settings: Universe · Broker · Feed · Session · Risk · Mode │
+└────────────────────────────┬────────────────────────────────┘
+                             │ REST + WebSocket
+┌────────────────────────────▼────────────────────────────────┐
+│ API / Control plane (FastAPI)                               │
+│  auth · settings/universe · flatten/lock · reports          │
+└────────────────────────────┬────────────────────────────────┘
+                             │ commands / queries
+┌────────────────────────────▼────────────────────────────────┐
+│ Trading runtime (event state machine)                       │
+│  SessionClock → MarketData (stream) → Features              │
+│       → Regime → StrategySelector → Score → CostVeto        │
+│       → RiskEngine (authority) → Execution → Protect        │
+│       → Reconcile → Telemetry                               │
+└───────┬──────────────────┬──────────────────┬───────────────┘
+        │                  │                  │
+   PostgreSQL         Venue adapters      Research job
+   book, orders,      Alpaca equities     walk-forward,
+   features,          Alpaca crypto*      holdout, stress,
+   trials             (+ later venues)    paper replay
 ```
 
-## Core Components
+`*` Crypto adapter stays dark until fee/liquidity gates pass.
 
-### 1. Trading Engine
-**Purpose**: Core logic that processes market data, calculates indicators, and executes trades
+**Layer rules**
 
-**Responsibilities**:
-- Monitor market hours (9:30 AM - 12:00 PM EST)
-- Subscribe to real-time price data for configured symbols
-- Calculate technical indicators for each symbol
-- Evaluate trading signals based on indicator configurations
-- Execute buy/sell orders via Alpaca API
-- Apply risk management rules (stop-loss, take-profit, position sizing)
-- Log all trades to database
-- Emit real-time updates via WebSocket
+1. **Venue adapter** — capability matrix, fee tier, session, rate limits, orders, streams. Strategy does not import this except through ports.
+2. **Session clock** — equity sessions vs crypto continuous; DST-correct `America/New_York`; rolling 24h risk window. Default live path is RTH only. Do not use `UTC-5` “ignoring DST.”
+3. **Market data** — **stream first**, REST snapshot/repair; **SIP for stocks**; venue-native for crypto; stale/gap freezes the asset. IEX is not research or production truth.
+4. **Features** — closed 5m/15m/(60m) derived from 1m; session VWAP (RTH reset; premarket isolated).
+5. **Regime + strategies + score** — pure functions. **Signal generation never places an order.**
+6. **Cost model** — all-in round trip; 3× veto; versioned fees.
+7. **Risk engine** — last word on size and permission; kill switch lives here.
+8. **Execution** — idempotent orders, protect emulation, implementation shortfall.
+9. **Research** — same decision functions as live; different clock.
 
-**Key Classes**:
-- `TradingEngine`: Main orchestrator
-- `IndicatorCalculator`: Technical indicator computations
-- `SignalGenerator`: Trading signal logic
-- `RiskManager`: Risk management enforcement
-- `OrderExecutor`: Alpaca API interaction
+## Core components
 
-### 2. Bot Management API
-**Purpose**: CRUD operations for trading bots
+### 1. Trading runtime (replaces `TradingEngine` / `BotRunner`)
 
-**Endpoints**:
-- `GET /api/bots` - List all bots
-- `POST /api/bots` - Create new bot
-- `GET /api/bots/{id}` - Get bot details
-- `PUT /api/bots/{id}` - Update bot configuration
-- `DELETE /api/bots/{id}` - Delete bot
-- `POST /api/bots/{id}/start` - Start bot
-- `POST /api/bots/{id}/stop` - Stop bot
-- `POST /api/bots/{id}/pause` - Pause bot
+An event-processing state machine, not a per-bot poll loop that REST-fetches 50 × 1-minute IEX bars and votes indicators.
 
-### 2.1 Trade Management API
-**Purpose**: Trade history and statistics
+`BOOT → SYNC → WARMUP → READY → VALIDATE_SIGNAL → RISK_CHECK → ENTERING → OPEN → EXITING → COOLDOWN`, plus `HALTED`.
 
-**Endpoints**:
-- `GET /api/trades` - List trades (with filters: date range, bot, symbol, type)
-- `GET /api/trades/{id}` - Get trade details
-- `GET /api/trades/stats` - Get trade statistics (win rate, P&L, etc.)
+**Responsibilities**
 
-### 2.2 Position Management API
-**Purpose**: Open positions management
+- Honor the session clock (equities: `PREMARKET → RTH → POSTMARKET → OVERNIGHT`; live default RTH).
+- Stream the configured universe; repair with REST; enforce quote-age / gap gates.
+- Build features only from **closed** 5m (signals) and 15m (regime) bars.
+- Classify regime; select at most one engine (trend/momentum, breakout, mean-reversion). Transition (18 < ADX < 23, or mixed) is usually no trade.
+- Score candidates; apply hard vetoes; hand a *request* to risk.
+- Execute only after risk and cost approve; reconcile fills; protect open risk; emit telemetry.
 
-**Endpoints**:
-- `GET /api/positions` - List open positions (with filters: bot, symbol)
-- `GET /api/positions/{id}` - Get position details
-- `POST /api/positions/{id}/close` - Close a position
+**Salvage from current code:** lifespan start/restore, `client_order_id` + reconciler, “unfilled sell stays open,” emergency flatten endpoints, activity-log reason strings, paper-vs-live URL guard.
 
-### 2.3 Market Data API
-**Purpose**: Market status and data
+**Throw away:** majority vote, entry-indicator tracking (first BUY opens; only that indicator’s SELL closes), `evaluate_single` primary-indicator mode, IEX-as-truth, poll-50-bars loop as the engine.
 
-**Endpoints**:
-- `GET /api/market-status` - Get current market status
-- `GET /api/market-data/{symbol}` - Get market data for symbol
-- `GET /api/summary` - Get dashboard summary statistics
+### 2. Hybrid strategy (replaces `signal_generator` vote contract)
 
-### 2.4 WebSocket Endpoints
-**Purpose**: Real-time updates
+| Engine | When it may trade | Role |
+|---|---|---|
+| Trend / momentum (pullback or continuation) | ADX ≥ 23 and a real trend | Primary |
+| Volatility breakout | Compression then expansion | Second |
+| Mean reversion to VWAP | ADX ≤ 18, low-trend only | Conditional |
+| Transition | 18 < ADX < 23, or mixed | Usually no trade |
 
-**Endpoints**:
-- `WS /ws` - WebSocket connection (socket.io protocol)
-  - Events: `trade_executed`, `position_updated`, `bot_status_changed`, `price_update`, `market_status_changed`
+Core features: **EMA + VWAP + RSI + ATR + ADX + volume/OBV + spread / order-flow proxy**. MACD and Bollinger Bands live inside the trend/momentum or compression blocks with a **capped** weight — not independent full-weight votes.
 
-**Bot Configuration Schema**:
-```json
-{
-  "name": "Momentum Bot",
-  "capital": 10000,
-  "trading_frequency": 60,
-  "symbols": ["AAPL", "MSFT", "GOOGL"],
-  "indicators": {
-    "RSI": {"period": 14, "oversold": 30, "overbought": 70},
-    "MACD": {"fast": 12, "slow": 26, "signal": 9},
-    "SMA": {"period": 50}
-  },
-  "risk_management": {
-    "stop_loss": 0.02,
-    "take_profit": 0.05,
-    "max_position_size": 0.1,
-    "max_daily_loss": 0.1
-  },
-  "start_hour": 9,
-  "start_minute": 30,
-  "end_hour": 12,
-  "end_minute": 0
-}
-```
+RSI is not “below 30 means buy.” Momentum longs live around RSI 55–72; mean-reversion longs around 25–35 **after** price starts reclaiming the extreme.
 
-### 3. Database Schema
+Transparent score (not a win probability until calibrated):
 
-**Bots Table**:
-- `id`: Primary key
-- `name`: Bot name
-- `status`: stopped/running/paused/error
-- `capital`: Allocated capital
-- `trading_frequency`: Seconds between checks
-- `indicators`: JSON configuration
-- `risk_management`: JSON configuration
-- `symbols`: JSON array of stock symbols
-- `start_hour`, `start_minute`, `end_hour`, `end_minute`: Trading window
-- `created_at`, `updated_at`: Timestamps
+`score = 25R + 20T + 15M + 15S + 10V + 10O + 5E`  
+(regime, trend/location, momentum, setup, volume, order-flow, execution quality)
 
-**Trades Table**:
-- `id`: Primary key
-- `bot_id`: Foreign key to bots
-- `symbol`: Stock symbol
-- `type`: buy/sell
-- `quantity`: Number of shares
-- `price`: Execution price
-- `timestamp`: Trade time
-- `indicators_snapshot`: Indicator values at trade time
-- `profit_loss`: P&L for closed positions
-- `order_id`: Alpaca order ID (optional)
-- `status`: pending/filled/cancelled/failed
-- `commission`: Trade commission (optional)
-- `slippage`: Execution slippage (optional)
+Trade only at **≥ 70/100**. 60–69 is watch-only. Hard vetoes always beat score: daily lock, stale data, wide spread, cost too high, halt, unknown account state, possible duplicate, correlation/risk cap.
 
-**Positions Table**:
-- `id`: Primary key
-- `bot_id`: Foreign key to bots
-- `symbol`: Stock symbol
-- `quantity`: Number of shares
-- `entry_price`: Average entry price
-- `current_price`: Current market price (updated in real-time)
-- `stop_loss_price`: Stop-loss price level
-- `take_profit_price`: Take-profit price level
-- `unrealized_pnl`: Current unrealized profit/loss
-- `realized_pnl`: Realized profit/loss (for closed positions)
-- `opened_at`: Position open timestamp
-- `closed_at`: Position close timestamp (null if open)
-- `is_open`: Boolean flag for open/closed status
+Default parameters are the spec’s first hypothesis. Nobody grid-searches them until the research harness exists.
 
-### 4. Frontend Components
+### 3. Risk engine (replaces percent-of-bot-capital checklist)
 
-**Dashboard**:
-- Real-time price charts with indicator overlays
-- Active bots status cards
-- Recent trades table
-- P&L summary
-- Market status indicator
+Risk sits **above** strategy. Starting book for a **$5,000** design default, 1× gross:
 
-**Bot Configuration UI**:
-- Form to create/edit bots
-- Indicator selector with parameters
-- Risk management settings
-- Symbol picker
-- Trading window configuration
-- Capital allocation input
+| Control | Default |
+|---|---|
+| Hard combined daily loss | 2.00% — cancel entries, flatten, lock |
+| Soft throttle | −1.00% — half new-trade risk |
+| Stop new risk | −1.50% |
+| Risk per trade | 0.25% |
+| Max aggregate open stop-risk | 0.75% |
+| Normal max positions | 3 |
+| Single-name notional | 25% stocks / 20% crypto |
+| Min confidence | 70/100 |
+| Min gross target | ≥ 1.5R and ≥ 3× expected round-trip cost |
 
-**Trade History**:
-- Filterable trade log (by date range, bot, symbol, type)
-- Sortable and paginated trade table
-- Trade detail modal with full information
-- P&L analysis with charts
-- Trade statistics (win rate, profit factor, etc.)
-- CSV export functionality
-- URL query params for shareable filter states
+Daily P&L is **realized + unrealized + estimated liquidation cost**, session-correct (not UTC-midnight realized-only per bot). Size from **stop distance + emergency-exit cost**, then cap notional, portfolio, and correlation. ATR stops (~1.2 ATR stocks), not a fixed 2% of price. Correlation: names above ~0.75 share a cluster budget.
 
-**Positions Page**:
-- Summary bar (total positions, value, unrealized P&L)
-- Filterable positions table (by bot, symbol, sort order)
-- Responsive design (table on desktop, cards on mobile)
-- Position detail modal with price chart
-- Real-time position updates via WebSocket
-- Position closing functionality
-- TradingView Lightweight Charts integration
+SELL/flatten paths stay allowed when reducing risk; strategy code cannot bypass halt / flatten / lock.
 
-**Analytics Page**:
-- Performance overview with key metrics
-- Cumulative P&L chart (daily/cumulative toggle)
-- Bot performance comparison (chart + table)
-- Symbol performance breakdown (chart + table)
-- Time range filtering (1W, 1M, 3M, 6M, 1Y, ALL)
-- Advanced metrics (Sharpe ratio, profit factor, max drawdown)
+### 4. Execution adapter (replaces market-order + software poll)
 
-## Technical Indicators Supported
+Keep Alpaca as the first venue. Replace “submit market and poll 30 × 1s”:
 
-### Momentum Indicators
-- **RSI (Relative Strength Index)**: Overbought/oversold conditions
-- **MACD (Moving Average Convergence Divergence)**: Trend changes
-- **Stochastic Oscillator**: Momentum indicator
+- Quote + spread + depth/proxy; all-in cost estimate
+- Normal entries: passive / marketable-limit first; one reprice; never chase past max slippage
+- Breakouts: aggressive limit allowed
+- Hard stop / kill switch: **certainty of exit** over maker fees
+- Idempotent `client_order_id`s; no cancel/repost loops
+- Implementation-shortfall on every order
+- Broker state is authoritative on rejects and buying power
+- Software `protect_position()` emulates missing brackets (needed later for crypto)
 
-### Trend Indicators
-- **SMA (Simple Moving Average)**: Trend direction
-- **EMA (Exponential Moving Average)**: Weighted trend
-- **Bollinger Bands**: Volatility and support/resistance
+Capability is a **matrix**, not assumptions: long/short, market/limit/stop, bracket/OCO, sessions. Equity shorts need live shortable/borrow checks and stay off for the first live book. Alpaca crypto is not shortable and not marginable.
 
-### Volume Indicators
-- **Volume SMA**: Volume trends
-- **On-Balance Volume (OBV)**: Volume-price relationship
+### 5. Universe + market data
 
-### Custom Indicators
-- Easy to extend with new indicators via pandas-ta
+Universe is **Settings configuration**, then a streaming scan:
 
-## Trading Logic Flow
+- Point-in-time membership (no “today’s top 100 survivors” in research)
+- Filters: liquid U.S. names, price floor, RTH spread band
+- Stream quotes/trades/bars for members; REST only for snapshot, command, and repair
+- Token bucket, backoff, jitter, reconnect, gap detection, periodic reconcile
+- Stale quotes or NaN/impossible features freeze that symbol; they do not silently vote
+
+### 6. Control-plane API
+
+Product endpoints (target). Paths stay under `/api` as today.
+
+**Settings / universe (primary config)**
+
+- Existing: `GET /api/settings`, broker / notifications / display updates, broker test, export, data-stats, activity
+- Add: universe get/update (filters + current membership snapshot), session flags, feed (SIP/IEX diagnostic), fee-tier refresh, account mode, risk-cap get/update (hard-capped), flatten / lock / unlock
+
+**Book ops (rebind; drop bot filters as the product)**
+
+- `GET /api/positions`, `GET /api/positions/{id}`, `POST /api/positions/{id}/close`
+- `GET /api/trades`, `GET /api/trades/{id}`, `GET /api/trades/stats`
+- `GET /api/account`, `GET /api/market-status`, `GET /api/summary` (book risk / regime / freshness, not bot counts)
+- `WS /ws` — `trade_executed`, `position_updated`, `price_update`, `market_status_changed`, plus `risk_event`, `regime_changed`, `data_health`, `universe_updated`. Drop `bot_status_changed` as a product event.
+
+**Auth (shipped)**
+
+- Google OAuth + JWT; per-user broker credentials and settings
+
+**Retired live contract**
+
+- `GET/POST /api/bots`, `GET/PUT/DELETE /api/bots/{id}`, `POST /api/bots/{id}/start|stop|pause`
+
+### 7. Database schema (target)
+
+Greenfield strategy/orders/research is cleaner than migrating `bots.indicators`. Keep **users**, **app_settings**, and historical trades/positions as **archive**.
+
+| Area | Intent |
+|---|---|
+| `users`, `app_settings` | Keep. Add settings categories: `universe`, `session`, `risk`, `feed`, `mode` (alongside `broker`, notifications, display). |
+| `strategy_versions` | Locked parameter set + hash + promotion state |
+| `universe_snapshots` | Point-in-time membership from filters |
+| `market_bars` / quotes (or external research store) | 1m and derived 5m/15m/60m |
+| `feature_snapshots` | Values used for a decision |
+| `signals` | Candidate, regime, score components, veto code |
+| `orders` / `fills` | Client id, intended vs broker, fees, slippage, shortfall |
+| `positions` | Side, stop, target, trail, max hold, cluster, sleeve — **book-scoped**, not `bot_id` |
+| `trades` | Rebind off `bot_id` as the product FK; keep old rows as archive |
+| `risk_events` | Throttle, lock, flatten, mismatch |
+| `research_trials` | Every parameter attempt, including failures |
+| `activity_logs` | Keep; extend with veto-code telemetry |
+| `bots` | Archive / optional cutover alias only |
+
+Do not keep `indicators` JSON as the product.
+
+## Frontend surfaces
+
+| Surface | Job after reboot |
+|---|---|
+| **Dashboard** (`/`) | Book equity, marked daily P&L vs 2% lock, staged throttle, open-risk, position count, regime, data freshness, kill-switch. Not “active bots.” |
+| **Positions** (`/positions`) | Same page, rebound to the book: score, veto, regime, expected vs realized cost, hold time, ATR stop/target |
+| **Trades** (`/trades`) | Same page + reason/veto codes, shortfall, regime/session |
+| **Analytics** (`/analytics`) | Add expectancy, turnover, CVaR, cost/gross-alpha, regime/session/asset splits. Drop “bot comparison” as a first-class chart. |
+| **Settings** (`/settings`) | **Universe + broker + feed + session + risk + mode** plus existing prefs. This is where the Bots factory’s job goes. |
+| **Bots / Create / Edit** | Deleted as product routes; redirect to Settings → Universe |
+| **Research console** (later) | Trials, gates, promotion checklist, veto telemetry — not a second live book |
+
+Settings sidebar today: Broker, Notifications, Display, Appearance, Data, Activity. **Universe** (and Session / Risk / Feed / Mode as needed) insert ahead of personalization. Broker stays; add SIP vs IEX, fee-tier refresh, paper/live mode, session flags there or as sibling sections — not on a bot form.
+
+## Trading logic flow
 
 ```
-1. Market Open Check (9:30 AM EST)
+1. Session clock: RTH? Else no new equity risk (extended is a separate, off strategy)
    ↓
-2. For each active bot:
+2. Stream universe members (SIP). Freeze stale / halted / gapped names
    ↓
-3. Subscribe to real-time data for bot's symbols
+3. On closed 15m: classify regime (trend / range / compression / transition)
    ↓
-4. Every [trading_frequency] seconds:
+4. On closed 5m: evaluate only the engine the regime allows
    ↓
-5. Calculate configured indicators
+5. Score ≥ 70? Else watch / no-trade
    ↓
-6. Generate trading signals:
-   - Buy: RSI < oversold, MACD bullish crossover, etc.
-   - Sell: RSI > overbought, MACD bearish crossover, etc.
+6. Hard vetoes (cost, spread, data, halt, duplicate, lock, correlation…)
    ↓
-7. Risk Management Check:
-   - Position size within limits
-   - Stop-loss/take-profit levels
-   - Daily loss limits
+7. Risk engine: size from stop + exit cost; apply book caps; or reject
    ↓
-8. Execute trade via Alpaca API
+8. Execution policy (limit-first; certainty exits for protect / kill)
    ↓
-9. Log trade to database
+9. Reconcile fills; protect; time stop / max hold / trail
    ↓
-10. Emit update via WebSocket
-    ↓
-11. Continue until market window closes (12:00 PM)
+10. Telemetry + WebSocket (book, not bot)
 ```
 
-## Risk Management Features
+Signal code stops at step 5–6. It never submits an order.
 
-1. **Position Sizing**: Maximum percentage of capital per position
-2. **Stop-Loss**: Automatic sell at configured loss percentage
-3. **Take-Profit**: Automatic sell at configured profit percentage
-4. **Daily Loss Limit**: Stop trading if daily loss exceeds threshold
-5. **Maximum Positions**: Limit concurrent open positions
-6. **Capital Protection**: Never risk more than allocated capital
+## Risk management features
 
-## Security Considerations
+1. **Dollar stop-risk sizing** including emergency-exit cost (not `capital × max_position_size% / price`)
+2. **ATR / structure stops** and 1.5–2.0R targets; trail ~1.5 ATR
+3. **Staged daily + rolling-24h** marked P&L (includes estimated flatten cost)
+4. **Flatten-and-lock** at −2%; no new risk at −1.5%; throttle at −1.0%
+5. **Aggregate open-risk, 1× gross, max 3 names**, single-name notional cap
+6. **Correlation clusters** (combined cluster risk ≤ 0.35% of equity at the spec default)
+7. **Time stop ~60 minutes** if the trade has not progressed; hard max hold 4 hours
+8. **No averaging down**
+9. **Capability checks** (shortable, borrow, venue) before any short or crypto path
+10. **Kill switch** uses existing emergency-close instinct; strategy cannot bypass it
 
-1. **API Keys**: Stored in environment variables, never in code
-2. **Authentication**: JWT tokens for API access (future enhancement)
-3. **Rate Limiting**: Prevent API abuse
-4. **Input Validation**: Pydantic schemas validate all inputs
-5. **Error Handling**: Graceful degradation, error logging
-6. **Paper Trading**: Test with Alpaca paper trading first
+Retired as the risk system: fixed % SL/TP, capital-% sizing, realized-only UTC daily loss, independent per-bot books that may trade the same symbol.
 
-## Scalability Considerations
+## Security
 
-1. **Horizontal Scaling**: Stateless API, can run multiple instances
-2. **Database Connection Pooling**: SQLAlchemy connection pool
-3. **Async Processing**: FastAPI async/await for concurrent requests
-4. **Caching**: Redis for frequently accessed data
-5. **Message Queue**: For high-frequency trading (future: RabbitMQ/Kafka)
+1. **API keys**: environment and per-user encrypted settings; never in code
+2. **Authentication**: Google OAuth + JWT (live)
+3. **Paper-vs-live URL guard**: keep and tighten
+4. **Rate limiting**, Pydantic validation, structured error logs
+5. **Idempotent client order IDs**; broker is source of truth on rejects
+6. Promotion to live is gated (research harness), not “one good backtest”
 
-## Development Workflow
+Account UI must not center deprecated PDT / `daytrade_count` fields. Use current buying-power / intraday-margin fields.
 
-1. **Local Development**:
-   - Docker Compose for services (PostgreSQL, Redis)
-   - Hot reload for FastAPI (uvicorn --reload)
-   - React dev server with Vite
+## Scalability and ops
 
-2. **Testing**:
-   - Unit tests for indicator calculations
-   - Integration tests for API endpoints
-   - Paper trading for live testing
+- Stateless control-plane API; one production runtime, **one book**, one risk engine
+- A second experiment runs in paper against a **shadow book**, never sharing live buying power
+- SQLAlchemy pool; async FastAPI
+- Event-driven market data; REST for repair only
+- Structured JSON logs; veto reason codes (`NO_TRADE_COST`, `NO_TRADE_STALE_DATA`, …)
+- Health: `/api/health`
 
-3. **Deployment**:
-   - Docker containers
-   - CI/CD pipeline (GitHub Actions)
-   - Environment-specific configs
+## Development workflow
 
-## Environment Variables
+1. **Local**: Docker Compose (API, UI, Postgres). Redis optional and unused.
+2. **Tests**: rewrite contracts around closed-bar features, regime, score, vetoes, and risk authority. Quarantine voter / entry-indicator tests so they cannot become the new contract.
+3. **Deploy**: Docker; env-specific config; paper before any live size.
+
+## Environment variables
 
 ```env
 # Database
 DATABASE_URL=postgresql://user:pass@localhost:5432/trading_bot
 
-# Alpaca API
+# Alpaca (defaults; per-user settings override trading credentials)
 ALPACA_API_KEY=your_api_key
 ALPACA_SECRET_KEY=your_secret_key
-ALPACA_BASE_URL=https://paper-api.alpaca.markets  # or https://api.alpaca.markets
+ALPACA_BASE_URL=https://paper-api.alpaca.markets
 
-# Redis (optional)
-REDIS_URL=redis://localhost:6379
+# Data
+# Production/research equity feed is SIP. IEX is diagnostic only.
+
+# Auth
+GOOGLE_CLIENT_ID=...
+JWT secrets per existing app config
 
 # Application
 ENVIRONMENT=development
 LOG_LEVEL=INFO
 ```
 
-## Future Enhancements
+`REDIS_URL` may remain in Compose for local leftovers; it is not required by the runtime.
 
-1. **Machine Learning**: ML-based signal generation
-2. **Backtesting**: Historical strategy testing
-3. **Multi-Exchange**: Support for other brokers
-4. **Advanced Risk Models**: VaR, portfolio optimization
-5. **Mobile App**: React Native mobile app
-6. **Notifications**: Email/SMS alerts
-7. **Strategy Templates**: Pre-configured bot templates
-8. **Social Trading**: Share bot configurations
+## Research and promotion (architecture, not a sprint plan)
 
-## Component Communication
+Deployment is gated:
 
-### Communication Matrix
+historical sim → walk-forward OOS → locked holdout → paper → shadow live → min-size live → scale
 
-| Component | Communicates With | Protocol | Purpose |
-|-----------|-------------------|----------|---------|
-| **React Frontend** | FastAPI Backend | HTTP REST | CRUD operations, data fetching |
-| **React Frontend** | FastAPI Backend | WebSocket (socket.io) | Real-time updates |
-| **FastAPI Backend** | PostgreSQL | SQL (via SQLAlchemy) | Data persistence |
-| **FastAPI Backend** | Redis | Redis Protocol | Caching, pub/sub |
-| **Trading Engine** | Alpaca API | REST API | Order execution |
-| **Trading Engine** | Alpaca API | WebSocket | Market data subscription |
-| **Trading Engine** | PostgreSQL | SQL (via SQLAlchemy) | Trade logging |
-| **Trading Engine** | WebSocket Broadcaster | Internal | Real-time event emission |
-| **Indicator Calculator** | Trading Engine | Internal (Python) | Indicator computation |
-| **Risk Manager** | Trading Engine | Internal (Python) | Risk validation |
-| **Signal Generator** | Trading Engine | Internal (Python) | Signal generation |
+Acceptance: **robust positive out-of-sample expectancy after real costs, under stressed execution, inside the 2% daily-loss architecture.** Old voter fills are a different strategy and are not evidence.
 
-### Key Data Flows
+A research console (trials, gates, promotion checklist) is a later UI. It does not restore the Bots factory.
 
-**Bot Creation Flow**:
+## Component communication
+
+| Component | Communicates with | Protocol | Purpose |
+|---|---|---|---|
+| React UI | FastAPI | HTTP REST | Settings/universe, book queries, flatten/lock |
+| React UI | FastAPI | WebSocket (Socket.IO) | Book, risk, regime, data-health, fills |
+| FastAPI | PostgreSQL | SQLAlchemy | Persistence |
+| Runtime | Alpaca | REST | Orders, account, repair snapshots |
+| Runtime | Alpaca | Stream (SIP stocks) | Universe scan, quotes, bars |
+| Features / regime / score | Runtime | In-process, no I/O | Candidates only |
+| Risk engine | Runtime | In-process | Permission, size, kill |
+| Research job | Same decision functions | Batch clock | Walk-forward / holdout |
+
+### Key data flows
+
+**Universe configuration (replaces bot create):**
+
 ```
-User → Frontend Form → POST /api/bots → FastAPI → PostgreSQL → Response → Frontend → Success
+User → Settings → Universe filters → PUT /api/settings/universe →
+Postgres snapshot → runtime resubscribes stream → WS universe_updated
 ```
 
-**Trading Flow**:
-```
-Alpaca WebSocket → Trading Engine → Calculate Indicators → Generate Signal → 
-Risk Check → Execute Order → Alpaca REST → Log to DB → Broadcast WebSocket → 
-Frontend Update
-```
+**Decision / trade:**
 
-**Dashboard Update Flow**:
 ```
-User Opens Dashboard → Frontend → GET /api/summary → FastAPI → PostgreSQL → 
-Response → Frontend Display
-+
-WebSocket Connection → Real-time Events → Frontend Auto-Update
+SIP stream → closed 5m/15m features → regime → hybrid engine → score →
+vetoes → risk authority → execution → Alpaca → reconcile → DB → WS
 ```
 
-**Position Monitoring Flow**:
+**Dashboard:**
+
 ```
-Trading Engine → Position Opened → Log to DB → Broadcast WebSocket → 
-Frontend Positions Page → Real-time Price Updates → Calculate Unrealized P&L → 
-Display in UI
+GET /api/summary + GET /api/account + WS risk/regime/data-health
 ```
 
-## Technology Stack Layers
+There is no “create bot → start bot → per-symbol poll” flow.
 
-### Presentation Layer
-- **React 18+** with TypeScript
-- **Material-UI (MUI)** - Component library
-- **TradingView Lightweight Charts** - Real-time price charts
-- **Recharts** - Analytics and performance charts
+## Technology stack layers
 
-### State & Communication Layer
-- **TanStack Query** - Server state management, caching, refetching
-- **React Router** - Client-side routing and navigation
-- **socket.io-client** - WebSocket client for real-time updates
-- **Axios** - HTTP client for REST API calls
+- **Presentation**: React 18, MUI, charts as today; pages rebound as above
+- **State**: TanStack Query, React Router, Socket.IO client, Axios
+- **API**: FastAPI routers — Settings (incl. universe), Auth, Account, Positions, Trades, Market/Summary — **not** Bots CRUD as product
+- **Business**: session clock, features, regime, hybrid selector, score, cost veto, **risk authority**, execution, reconcile
+- **Data**: PostgreSQL + Alembic; optional external research store for 1m history
+- **External**: Alpaca REST + SIP stream
 
-### API Layer
-- **FastAPI** (Python 3.11+) - High-performance async web framework
-- **Pydantic** - Data validation and serialization
-- **API Routers** - REST endpoints (Bots, Trades, Positions, Market Data)
-- **WebSocket Endpoints** - Real-time event broadcasting
-
-### Business Logic Layer
-- **Trading Engine** - Core trading orchestration
-- **pandas-ta** - Technical indicator calculations
-- **Risk Manager** - Risk management enforcement
-- **Signal Generator** - Trading signal generation logic
-
-### Data Access Layer
-- **SQLAlchemy** - ORM for database operations
-- **Alembic** - Database migration management
-- **Connection Pooling** - Efficient database connection management
-
-### Data Storage Layer
-- **PostgreSQL** - Primary relational database
-- **Redis** - Caching and pub/sub (optional but recommended)
-
-### External APIs
-- **Alpaca REST API** - Order execution and account management
-- **Alpaca WebSocket** - Real-time market data streams
-
-## File Structure
+## File structure (target)
 
 ```
 trading-bot/
 ├── backend/
 │   ├── app/
-│   │   ├── __init__.py
 │   │   ├── main.py
-│   │   ├── database.py
-│   │   ├── models.py
-│   │   ├── schemas.py
-│   │   ├── alpaca_client.py
-│   │   ├── trading_engine.py
-│   │   ├── indicators.py
-│   │   ├── risk_manager.py
+│   │   ├── auth.py
+│   │   ├── models.py              # users, settings, book, research — not bots-as-product
+│   │   ├── alpaca_client.py       # venue adapter: SIP, streams, capability, fees
+│   │   ├── session_clock.py
+│   │   ├── market_data/           # stream + repair
+│   │   ├── features/              # closed-bar EMA/VWAP/RSI/ATR/ADX/…
+│   │   ├── strategy/              # regime, engines, score (no I/O)
+│   │   ├── risk/                  # authority, kill, clusters
+│   │   ├── execution/
+│   │   ├── reconciler.py          # keep / extend
+│   │   ├── trading_runtime.py     # state machine (replaces BotRunner)
 │   │   └── routers/
-│   │       ├── bots.py
+│   │       ├── settings.py        # + universe, session, risk, mode
+│   │       ├── auth.py
+│   │       ├── account.py
 │   │       ├── trades.py
 │   │       ├── positions.py
 │   │       └── market_data.py
-│   ├── alembic/
-│   ├── requirements.txt
-│   ├── Dockerfile
-│   └── .env.example
+│   └── alembic/
 ├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── dashboard/
-│   │   │   ├── bots/
-│   │   │   ├── trades/
-│   │   │   ├── positions/
-│   │   │   ├── analytics/
-│   │   │   ├── common/
-│   │   │   └── layout/
-│   │   ├── pages/
-│   │   │   ├── Dashboard.tsx
-│   │   │   ├── Bots.tsx
-│   │   │   ├── CreateBot.tsx
-│   │   │   ├── EditBot.tsx
-│   │   │   ├── Trades.tsx
-│   │   │   ├── Positions.tsx
-│   │   │   └── Analytics.tsx
-│   │   ├── hooks/
-│   │   ├── services/
-│   │   │   ├── api.ts
-│   │   │   └── websocket.ts
-│   │   └── types/
-│   ├── package.json
-│   ├── Dockerfile
-│   └── vite.config.ts
+│   └── src/
+│       ├── pages/
+│       │   ├── Dashboard.tsx      # book, not bots
+│       │   ├── Settings.tsx       # Universe section replaces Bots factory
+│       │   ├── Positions.tsx
+│       │   ├── Trades.tsx
+│       │   └── Analytics.tsx
+│       └── components/
+│           ├── layout/            # nav without Bots; Settings in primary tabs
+│           └── settings/          # UniverseFilters, membership preview
 ├── docker-compose.yml
 ├── Plans/
-│   ├── ARCHITECTURE.md
-│   ├── BACKEND_IMPLEMENTATION_PLAN.md
-│   ├── SYSTEM_ARCHITECTURE_DIAGRAMS.md
-│   └── ARCHITECTURE_DIAGRAMS.html
+│   └── ARCHITECTURE.md            # this file — living architecture
 └── README.md
 ```
 
-## Performance Targets
+Retired product files (do not extend as the live path): `pages/Bots.tsx`, `CreateBot.tsx`, `EditBot.tsx`, `components/bots/`, `components/dashboard/ActiveBotsList.tsx` / `BotCard.tsx`, `routers/bots.py`, `signal_generator.py` vote/entry-indicator contract.
 
-- **API Response Time**: < 100ms for CRUD operations
-- **Real-time Data Latency**: < 500ms from market to dashboard
-- **Trade Execution**: < 1 second from signal to order
-- **Concurrent Bots**: Support 10+ bots simultaneously
-- **Database Queries**: Optimized with indexes
+## Performance targets
 
-## Monitoring & Logging
+- Control-plane CRUD: &lt; 100ms typical
+- Stream-to-feature freshness: fail closed on stale data rather than trade a late poll
+- Kill / flatten: certainty of exit over latency cosmetics
+- **One** live book; no “10+ concurrent bots” target
 
-1. **Application Logs**: Structured logging (JSON format)
-2. **Metrics**: Trade execution times, API response times
-3. **Alerts**: Error notifications, unusual trading patterns
-4. **Health Checks**: `/health` endpoint for monitoring
+## Monitoring and logging
 
-## Implementation Notes
+- Structured JSON logs; request IDs
+- Veto codes and risk events on the dashboard and activity log
+- Metrics: data age, spread, shortfall, lock state, open-risk
+- Alerts: stale feed, flatten, daily lock, reconcile mismatch
 
-### WebSocket Protocol
-- All WebSocket connections use **socket.io** protocol for bidirectional communication
-- Events emitted: `trade_executed`, `position_updated`, `bot_status_changed`, `price_update`, `market_status_changed`
-- Automatic reconnection on connection loss
+## Implementation notes
 
-### Database Operations
-- **SQLAlchemy ORM** with connection pooling for efficient database access
-- **Alembic** for database migrations
-- JSON columns for flexible indicator and risk management configurations
-- Indexes on frequently queried fields (bot_id, symbol, timestamp)
+### Current repo vs this document
 
-### Caching Strategy
-- **Redis** is optional but highly recommended for production
-- Used for real-time data caching, pub/sub messaging, and rate limiting
-- Reduces database load and improves response times
+Code as of the last mainline (early March 2026) still implements the **retired** product: `BotRunner` poll, IEX 1m bars, indicator vote / entry-indicator tracking, percent risk, Bots nav and factory forms. Auth, settings (broker/prefs), positions/trades pages, reconciler, `client_order_id`, and emergency close are chassis to keep.
 
-### Security
-- All external API calls to Alpaca use **HTTPS**
-- API keys stored in environment variables, never in code
-- JWT tokens for API authentication (future enhancement)
-- Input validation via Pydantic schemas
+This file is the architecture to implement against. Implementation sequencing lives elsewhere; do not revive sprint plans that assume N bots.
 
-### Performance
-- **TanStack Query** for automatic caching and refetching on frontend
-- Trading Engine runs **asynchronously** and can handle multiple bots concurrently
-- Database connection pooling for efficient resource usage
-- Async/await throughout FastAPI for concurrent request handling
+### WebSocket
 
-### Real-time Updates
-- WebSocket broadcasts trade executions, position updates, and bot status changes
-- Frontend automatically updates via React Query cache invalidation
-- Sub-second latency from event to UI update
+Keep the existing Socket.IO `/ws` mount. Change payloads to the book.
+
+### Data
+
+JSON settings categories are fine for universe filters and risk caps. Do not store a live “indicators” blob as the strategy.
+
+### Caching
+
+No Redis requirement. Do not draw Redis on new diagrams until it is actually subscribed.
+
+### First-production defaults (from the spec; not for tuning yet)
+
+- $5,000, 1× gross, 3 positions, 0.25% / 0.75% / 2% risk ladder
+- Equities only, RTH, SIP, top 50–100 liquid names via Settings → Universe
+- EMA 9/21/50, RSI 14, ADX 14/23, ATR 14, BB 20,2, MACD 12/26/9 inside the trend block
+- Score ≥ 70, cost multiple 3×, max hold 4h
+- Crypto off; extended hours off; shorts off
 
 ---
 
-This architecture provides a solid foundation for a scalable, maintainable trading bot system with clear separation of concerns and modern best practices.
+The chassis is a competent broker dashboard. The reboot makes it a **cost-aware, regime-switching, risk-authoritative minutes-to-hours system** that refuses to trade most of the time — configured from Settings, not from a bot factory.
