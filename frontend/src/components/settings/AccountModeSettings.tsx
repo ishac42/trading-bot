@@ -26,7 +26,11 @@ const AccountModeSettings = ({ mode }: AccountModeSettingsProps) => {
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         One mode at a time. Two modes must not independently size the same buying power.
       </Typography>
-      <RadioGroup value={draft} onChange={(event) => setDraft(event.target.value as AccountMode)}>
+      <RadioGroup
+        aria-label="Account mode"
+        value={draft}
+        onChange={(event) => setDraft(event.target.value as AccountMode)}
+      >
         {options.map((option) => (
           <FormControlLabel
             key={option.value}
@@ -60,7 +64,7 @@ const AccountModeSettings = ({ mode }: AccountModeSettingsProps) => {
         onClose={() => setNotice(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-        <Alert severity="success" variant="filled" onClose={() => setNotice(null)}>
+        <Alert severity={notice?.ok === false ? 'error' : 'success'} variant="filled" onClose={() => setNotice(null)}>
           {notice?.message}
         </Alert>
       </Snackbar>

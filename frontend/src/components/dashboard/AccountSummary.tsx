@@ -1,5 +1,6 @@
 import React from 'react'
 import {
+  Alert,
   Box,
   Typography,
   Skeleton,
@@ -70,7 +71,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
 )
 
 export const AccountSummary: React.FC = () => {
-  const { data: account, isLoading } = useAccount()
+  const { data: account, isLoading, isError } = useAccount()
 
   if (isLoading) {
     return (
@@ -95,7 +96,13 @@ export const AccountSummary: React.FC = () => {
     )
   }
 
-  if (!account) return null
+  if (isError || !account) {
+    return (
+      <Alert severity="warning" sx={{ mb: 2 }}>
+        Account totals are unavailable. Book risk on this page still applies.
+      </Alert>
+    )
+  }
 
   const allocationPct =
     account.buying_power > 0

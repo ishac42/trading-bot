@@ -59,7 +59,7 @@ const SessionSettings = ({ session }: SessionSettingsProps) => {
         onClose={() => setNotice(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-        <Alert severity="success" variant="filled" onClose={() => setNotice(null)}>
+        <Alert severity={notice?.ok === false ? 'error' : 'success'} variant="filled" onClose={() => setNotice(null)}>
           {notice?.message}
         </Alert>
       </Snackbar>

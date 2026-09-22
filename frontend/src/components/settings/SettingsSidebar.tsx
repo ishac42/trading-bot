@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import type { SettingsSection } from '@/components/settings/settingsSections'
 import {
+  InputLabel,
   List,
   ListItemButton,
   ListItemIcon,
@@ -54,7 +55,10 @@ const SettingsSidebar = ({ active, onChange }: SettingsSidebarProps) => {
   if (isMobile) {
     return (
       <FormControl fullWidth sx={{ mb: 2 }}>
+        <InputLabel id="settings-section-label">Settings section</InputLabel>
         <Select
+          labelId="settings-section-label"
+          label="Settings section"
           value={active}
           onChange={(e) => onChange(e.target.value as SettingsSection)}
           size="small"

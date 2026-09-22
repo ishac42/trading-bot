@@ -9,6 +9,7 @@ import {
   TableRow,
   TableSortLabel,
   Paper,
+  Skeleton,
   Typography,
   useMediaQuery,
   useTheme,
@@ -52,6 +53,7 @@ interface PositionsTableProps {
   positions: Position[]
   onPositionClick: (position: Position) => void
   externalSort?: { field: string; order: string } | null
+  isLoading?: boolean
 }
 
 /**
@@ -66,6 +68,7 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
   positions,
   onPositionClick,
   externalSort,
+  isLoading = false,
 }) => {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
@@ -188,6 +191,16 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
       </Snackbar>
     </>
   )
+
+  if (isLoading) {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        {Array.from({ length: 4 }).map((_, index) => (
+          <Skeleton key={index} variant="rectangular" height={isMobile ? 120 : 44} />
+        ))}
+      </Box>
+    )
+  }
 
   if (isMobile) {
     return (

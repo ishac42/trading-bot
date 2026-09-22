@@ -6,6 +6,4 @@
 
 export { AccountSummary } from './AccountSummary'
 export { SummaryCards } from './SummaryCards'
-export { BotCard } from './BotCard'
-export { ActiveBotsList } from './ActiveBotsList'
 export { RecentTradesTable } from './RecentTradesTable'

@@ -41,7 +41,7 @@ const Navigation = () => {
   // Mobile drawer content
   const drawerContent = (
     <Box onClick={handleDrawerToggle} sx={{ textAlign: 'center', pt: 2 }}>
-      <List>
+      <List aria-label="Primary">
         {navItems.map((item, index) => (
           <ListItem key={item.path} disablePadding>
             <ListItemButton
@@ -73,7 +73,9 @@ const Navigation = () => {
           <Box sx={{ display: 'flex', alignItems: 'center', px: { xs: 1, sm: 2 }, py: 1 }}>
             <IconButton
               color="inherit"
-              aria-label="open drawer"
+              aria-label={mobileOpen ? 'Close navigation' : 'Open navigation'}
+              aria-expanded={mobileOpen}
+              aria-controls="primary-navigation-drawer"
               edge="start"
               onClick={handleDrawerToggle}
               sx={{ mr: 1 }}
@@ -102,9 +104,11 @@ const Navigation = () => {
             </Box>
           </Box>
           <Drawer
+            id="primary-navigation-drawer"
             variant="temporary"
             open={mobileOpen}
             onClose={handleDrawerToggle}
+            aria-label="Primary navigation"
             ModalProps={{
               keepMounted: true,
             }}
