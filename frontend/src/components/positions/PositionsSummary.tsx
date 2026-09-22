@@ -1,10 +1,9 @@
 import React from 'react'
 import { Box, Paper, Typography } from '@mui/material'
-import {
-  AccountBalance as AccountBalanceIcon,
-  TrendingUp as TrendingUpIcon,
-  ShowChart as ShowChartIcon,
-} from '@mui/icons-material'
+import AccountBalanceIcon from '@mui/icons-material/AccountBalance'
+import TrendingUpIcon from '@mui/icons-material/TrendingUp'
+import ShowChartIcon from '@mui/icons-material/ShowChart'
+import ShieldIcon from '@mui/icons-material/Shield'
 import type { Position } from '@/types'
 import { formatCurrency } from '@/utils/formatters'
 
@@ -32,6 +31,10 @@ export const PositionsSummary: React.FC<PositionsSummaryProps> = ({
     (sum, p) => sum + p.unrealized_pnl,
     0
   )
+  const openStopRisk = positions.reduce(
+    (sum, p) => sum + (p.open_stop_risk ?? 0),
+    0
+  )
 
   const cards = [
     {
@@ -45,6 +48,12 @@ export const PositionsSummary: React.FC<PositionsSummaryProps> = ({
       value: formatCurrency(totalValue),
       icon: <AccountBalanceIcon />,
       color: 'primary.main',
+    },
+    {
+      label: 'Open stop-risk',
+      value: formatCurrency(openStopRisk),
+      icon: <ShieldIcon />,
+      color: 'warning.main',
     },
     {
       label: 'Unrealized P&L',
@@ -65,7 +74,8 @@ export const PositionsSummary: React.FC<PositionsSummaryProps> = ({
         display: 'grid',
         gridTemplateColumns: {
           xs: '1fr',
-          sm: 'repeat(3, 1fr)',
+          sm: 'repeat(2, 1fr)',
+          md: 'repeat(4, 1fr)',
         },
         gap: 2,
         mb: 3,

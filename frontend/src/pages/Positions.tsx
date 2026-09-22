@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react'
-import { Box, Typography, Alert } from '@mui/material'
+import React, { useMemo, useState } from 'react'
+import { Box, Typography } from '@mui/material'
 import {
   PositionsSummary,
   PositionFilters,
@@ -7,161 +7,66 @@ import {
   PositionDetail,
 } from '@/components/positions'
 import type { PositionFilterValues } from '@/components/positions'
-import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 import { EmptyState } from '@/components/common/EmptyState'
-import { usePositions, useClosePosition } from '@/hooks/usePositions'
-import { useUnmanagedPositions } from '@/hooks/usePositions'
-import { useRealtimePositions } from '@/hooks/useRealtimePositions'
-import { useBots } from '@/hooks/useBots'
+import { useBook } from '@/hooks/useBook'
+import { closeBookPosition } from '@/mocks/bookStore'
 import type { Position } from '@/types'
 
-/**
- * Positions Page
- *
- * Displays all open positions with:
- * - Summary bar (total positions, value, unrealized P&L)
- * - Filters (by bot, symbol, sort)
- * - Responsive table (desktop) / cards (mobile)
- * - Position detail modal with chart
- * - Real-time updates via WebSocket
- */
 const Positions: React.FC = () => {
-  // Filters state
+  const { positions, bots } = useBook()
   const [filters, setFilters] = useState<PositionFilterValues>({
     botId: '',
     symbol: '',
     sortBy: '',
   })
-
-  // Selected position for detail modal
-  const [selectedPosition, setSelectedPosition] = useState<Position | null>(
-    null
-  )
+  const [selectedPosition, setSelectedPosition] = useState<Position | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
+  const [isClosing, setIsClosing] = useState(false)
 
-  // Parse sort filter value into field + order
-  const parsedSort = useMemo(() => {
+  const availableBots = useMemo(
+    () => bots.map((bot) => ({ id: bot.id, name: bot.name })),
+    [bots]
+  )
+
+  const availableSymbols = useMemo(
+    () => [...new Set(positions.map((position) => position.symbol))].sort(),
+    [positions]
+  )
+
+  const externalSort = useMemo(() => {
     if (!filters.sortBy) return null
-    const parts = filters.sortBy.split('_')
-    const order = parts.pop() as 'asc' | 'desc'
-    const field = parts.join('_')
-    return { field, order }
+    const match = filters.sortBy.match(/^(.*)_(asc|desc)$/)
+    if (!match) return null
+    return { field: match[1], order: match[2] }
   }, [filters.sortBy])
 
-  // Fetch data
-  const {
-    data: positions,
-    isLoading,
-    isError,
-    error,
-  } = usePositions({
-    botId: filters.botId || undefined,
-    symbol: filters.symbol || undefined,
-    sortBy: parsedSort?.field as any,
-    sortOrder: parsedSort?.order,
-  })
-
-  const { data: bots } = useBots()
-  const { data: unmanagedPositions } = useUnmanagedPositions()
-  const closePositionMutation = useClosePosition()
-
-  // Subscribe to real-time updates
-  useRealtimePositions()
-
-  // Derive available filter options from positions data
-  const availableBots = useMemo(() => {
-    if (!bots) return []
-    // Only include bots that have positions
-    const botIdsWithPositions = new Set(
-      positions?.map((p) => p.bot_id) || []
-    )
-    return bots
-      .filter(
-        (bot) =>
-          botIdsWithPositions.has(bot.id) ||
-          bot.status === 'running' ||
-          bot.status === 'paused'
-      )
-      .map((bot) => ({ id: bot.id, name: bot.name }))
-  }, [bots, positions])
-
-  const availableSymbols = useMemo(() => {
-    if (!positions) return []
-    return [...new Set(positions.map((p) => p.symbol))].sort()
-  }, [positions])
-
-  // Handlers
-  const handlePositionClick = (position: Position) => {
-    setSelectedPosition(position)
-    setDetailOpen(true)
-  }
+  const visible = useMemo(() => {
+    const filtered = positions.filter((position) => {
+      if (filters.botId && position.bot_id !== filters.botId) return false
+      if (filters.symbol && position.symbol !== filters.symbol) return false
+      return true
+    })
+    if (!filters.sortBy) return filtered
+    const [field, order] = filters.sortBy.split(/_(asc|desc)$/)
+    const direction = order === 'asc' ? 1 : -1
+    return [...filtered].sort((left, right) => {
+      const a = left[field as keyof Position]
+      const b = right[field as keyof Position]
+      if (typeof a === 'string' && typeof b === 'string') return a.localeCompare(b) * direction
+      return ((Number(a) || 0) - (Number(b) || 0)) * direction
+    })
+  }, [positions, filters])
 
   const handleClosePosition = (positionId: string) => {
-    closePositionMutation.mutate({ positionId, pauseBot: true }, {
-      onSuccess: () => {
-        setDetailOpen(false)
-        setSelectedPosition(null)
-      },
-    })
-  }
-
-  const handleDetailClose = () => {
+    setIsClosing(true)
+    closeBookPosition(positionId)
+    setIsClosing(false)
     setDetailOpen(false)
     setSelectedPosition(null)
   }
 
-  // Loading state
-  if (isLoading) {
-    return (
-      <Box>
-        <Typography
-          variant="h4"
-          component="h1"
-          sx={{
-            mb: { xs: 2, sm: 3 },
-            fontSize: { xs: '1.5rem', sm: '2rem', md: '2.5rem' },
-            fontWeight: 'bold',
-          }}
-        >
-          Positions
-        </Typography>
-        <LoadingSpinner text="Loading positions..." />
-      </Box>
-    )
-  }
-
-  // Error state
-  if (isError) {
-    return (
-      <Box>
-        <Typography
-          variant="h4"
-          component="h1"
-          sx={{
-            mb: { xs: 2, sm: 3 },
-            fontSize: { xs: '1.5rem', sm: '2rem', md: '2.5rem' },
-            fontWeight: 'bold',
-          }}
-        >
-          Positions
-        </Typography>
-        <Alert severity="error" sx={{ mb: 2 }}>
-          Failed to load positions:{' '}
-          {error instanceof Error ? error.message : 'Unknown error'}
-        </Alert>
-      </Box>
-    )
-  }
-
-  const managedPositions = positions || []
-  const unmanaged = (!filters.botId && !filters.symbol)
-    ? (unmanagedPositions || [])
-    : []
-  const positionsList = [...managedPositions, ...unmanaged]
-
   return (
     <Box>
-      {/* Page header */}
       <Typography
         variant="h4"
         component="h1"
@@ -174,10 +79,8 @@ const Positions: React.FC = () => {
         Positions
       </Typography>
 
-      {/* Summary cards */}
-      <PositionsSummary positions={positionsList} />
+      <PositionsSummary positions={visible} />
 
-      {/* Filters */}
       <PositionFilters
         filters={filters}
         onFilterChange={setFilters}
@@ -185,34 +88,36 @@ const Positions: React.FC = () => {
         availableSymbols={availableSymbols}
       />
 
-      {/* Positions table or empty state */}
-      {positionsList.length === 0 ? (
+      {visible.length === 0 ? (
         <EmptyState
-          title="No Open Positions"
+          title="No open positions"
           message={
             filters.botId || filters.symbol
-              ? 'No positions match your current filters. Try adjusting the filters.'
-              : 'There are no open positions right now. Positions will appear here when your bots open trades.'
+              ? 'No positions match these filters.'
+              : 'The book is flat. Positions appear here when a bot is filled.'
           }
-          variant={
-            filters.botId || filters.symbol ? 'empty-search' : 'no-data'
-          }
+          variant={filters.botId || filters.symbol ? 'empty-search' : 'no-data'}
         />
       ) : (
         <PositionsTable
-          positions={positionsList}
-          onPositionClick={handlePositionClick}
-          externalSort={parsedSort}
+          positions={visible}
+          externalSort={externalSort}
+          onPositionClick={(position) => {
+            setSelectedPosition(position)
+            setDetailOpen(true)
+          }}
         />
       )}
 
-      {/* Position detail modal */}
       <PositionDetail
         position={selectedPosition}
         open={detailOpen}
-        onClose={handleDetailClose}
+        onClose={() => {
+          setDetailOpen(false)
+          setSelectedPosition(null)
+        }}
         onClosePosition={handleClosePosition}
-        isClosing={closePositionMutation.isPending}
+        isClosing={isClosing}
       />
     </Box>
   )

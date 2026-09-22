@@ -10,6 +10,7 @@ import {
   saveRisk,
   saveUniverseFilters,
   setBookScenario,
+  closeBookPosition,
   startBotProfile,
   unlockBook,
 } from './bookStore'
@@ -18,6 +19,7 @@ beforeEach(() => {
   saveUniverseFilters({ top_n: 75, min_price: 5, max_spread_bps: 12 })
   saveRisk(defaultRisk)
   saveMode('paper')
+  setBookScenario('empty')
   setBookScenario('normal')
 })
 
@@ -52,6 +54,18 @@ describe('book store', () => {
     expect(createdBot?.risk.sleeve_loss_limit_pct).toBe(-2)
     setBookScenario('locked')
     expect(startBotProfile(createdBot!.id).ok).toBe(false)
+  })
+
+  it('closes a book position without stopping its bot', () => {
+    const before = getBookState().positions[0]
+    const riskBefore = getBookState().summary.open_stop_risk
+    expect(before).toBeDefined()
+    const result = closeBookPosition(before.id)
+    expect(result.ok).toBe(true)
+    expect(getBookState().positions.some((position) => position.id === before.id)).toBe(false)
+    expect(getBookState().summary.open_stop_risk).toBeLessThan(riskBefore)
+    expect(getBookState().summary.position_count).toBe(1)
+    expect(getBookState().bots.find((bot) => bot.id === before.bot_id)?.status).toBe('running')
   })
 
   it('refuses unlock while marked daily loss is at the lock', () => {

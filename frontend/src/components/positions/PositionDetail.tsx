@@ -8,15 +8,13 @@ import {
   Alert,
   CircularProgress,
 } from '@mui/material'
-import {
-  Close as CloseIcon,
-  AccessTime as AccessTimeIcon,
-} from '@mui/icons-material'
+import CloseIcon from '@mui/icons-material/Close'
+import AccessTimeIcon from '@mui/icons-material/AccessTime'
 import type { Position } from '@/types'
 import { Modal } from '@/components/common/Modal'
 import { PnLDisplay } from '@/components/common/PnLDisplay'
 import { formatCurrency, formatRelativeTime } from '@/utils/formatters'
-import { useBots } from '@/hooks/useBots'
+import { useBook } from '@/hooks/useBook'
 import { PositionChart } from './PositionChart'
 
 interface PositionDetailProps {
@@ -45,11 +43,11 @@ export const PositionDetail: React.FC<PositionDetailProps> = ({
   isClosing,
 }) => {
   const [showConfirmClose, setShowConfirmClose] = useState(false)
-  const { data: bots } = useBots()
+  const { bots } = useBook()
 
   const getBotName = (botId: string) => {
-    const bot = bots?.find((b) => b.id === botId)
-    return bot?.name || 'Unknown Bot'
+    const bot = bots.find((item) => item.id === botId)
+    return bot?.name || 'Unknown bot'
   }
 
   if (!position) return null
@@ -116,7 +114,7 @@ export const PositionDetail: React.FC<PositionDetailProps> = ({
             </Button>
           }
         >
-          Are you sure you want to close this position?
+          Close this position? The bot stays running.
         </Alert>
       )}
       <Box sx={{ display: 'flex', gap: 1, ml: 'auto' }}>
@@ -236,75 +234,39 @@ export const PositionDetail: React.FC<PositionDetailProps> = ({
             value={formatCurrency(totalValue)}
           />
           <DetailItem
-            label="Stop Loss"
-            value={
-              position.stop_loss_price
-                ? formatCurrency(position.stop_loss_price)
-                : 'Not set'
-            }
-            valueColor={position.stop_loss_price ? 'error.main' : undefined}
-          />
-          <DetailItem
-            label="Take Profit"
-            value={
-              position.take_profit_price
-                ? formatCurrency(position.take_profit_price)
-                : 'Not set'
-            }
-            valueColor={position.take_profit_price ? 'success.main' : undefined}
-          />
-          <DetailItem
             label="Duration"
             value={durationStr}
           />
-          {position.entry_indicator && (
-            <DetailItem
-              label="Entry Indicator"
-              value={position.entry_indicator}
-              valueColor="info.main"
-            />
-          )}
+          <DetailItem label="Regime" value={position.regime ?? '—'} />
+          <DetailItem label="Score" value={position.score != null ? String(position.score) : '—'} />
+          <DetailItem label="Veto" value={position.veto_code ?? '—'} />
+          <DetailItem
+            label="Expected cost"
+            value={position.expected_cost != null ? formatCurrency(position.expected_cost) : '—'}
+          />
+          <DetailItem
+            label="Realized cost"
+            value={position.realized_cost != null ? formatCurrency(position.realized_cost) : '—'}
+          />
+          <DetailItem
+            label="ATR stop"
+            value={position.atr_stop != null ? formatCurrency(position.atr_stop) : '—'}
+            valueColor="error.main"
+          />
+          <DetailItem
+            label="Target"
+            value={position.target_price != null ? formatCurrency(position.target_price) : '—'}
+            valueColor="success.main"
+          />
         </Box>
 
         {/* Risk level chips */}
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-          {position.stop_loss_price && (
-            <Chip
-              label={`SL: ${formatCurrency(position.stop_loss_price)} (${(
-                ((position.stop_loss_price - position.entry_price) /
-                  position.entry_price) *
-                100
-              ).toFixed(2)}%)`}
-              size="small"
-              color="error"
-              variant="outlined"
-            />
-          )}
-          {position.take_profit_price && (
-            <Chip
-              label={`TP: ${formatCurrency(position.take_profit_price)} (${(
-                ((position.take_profit_price - position.entry_price) /
-                  position.entry_price) *
-                100
-              ).toFixed(2)}%)`}
-              size="small"
-              color="success"
-              variant="outlined"
-            />
-          )}
           <Chip
             label={`P&L: ${pnlPercent >= 0 ? '+' : ''}${pnlPercent.toFixed(2)}%`}
             size="small"
             color={pnlPercent >= 0 ? 'success' : 'error'}
           />
-          {position.entry_indicator && (
-            <Chip
-              label={`Entry: ${position.entry_indicator}`}
-              size="small"
-              color="info"
-              variant="outlined"
-            />
-          )}
         </Box>
 
         <Divider />

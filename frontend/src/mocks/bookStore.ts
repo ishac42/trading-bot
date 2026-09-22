@@ -8,6 +8,7 @@ import type {
   BotRiskParameters,
   FeeTier,
   FeedSettings,
+  Position,
   RiskCaps,
   SessionSettings,
   Trade,
@@ -148,6 +149,16 @@ const vetoLogs: ActivityLogEntry[] = [
   },
 ]
 
+function withPositionTotals(summary: BookSummary, positions: Position[]): BookSummary {
+  const openStop = positions.reduce((sum, item) => sum + (item.open_stop_risk ?? 0), 0)
+  return {
+    ...summary,
+    position_count: positions.length,
+    open_stop_risk: openStop,
+    open_stop_risk_pct: summary.equity > 0 ? (openStop / summary.equity) * 100 : 0,
+  }
+}
+
 function summaryFor(scenario: BookScenario): BookSummary {
   const base: BookSummary = {
     equity: 5000,
@@ -272,10 +283,60 @@ export interface BookState {
   trades: Trade[]
   activity: ActivityLogEntry[]
   bots: BotProfile[]
+  positions: Position[]
+}
+
+function seedPositions(): Position[] {
+  const opened = '2026-09-22T13:40:00.000Z'
+  return [
+    {
+      id: 'pos-nvda',
+      bot_id: 'bot-liquid',
+      symbol: 'NVDA',
+      quantity: 8,
+      entry_price: 117.4,
+      current_price: 118.62,
+      unrealized_pnl: 9.76,
+      realized_pnl: 0,
+      opened_at: opened,
+      is_open: true,
+      score: 74,
+      veto_code: null,
+      regime: 'trend',
+      expected_cost: 1.8,
+      realized_cost: 0.42,
+      hold_minutes: 48,
+      atr_stop: 115.9,
+      target_price: 120.2,
+      open_stop_risk: 21.76,
+    },
+    {
+      id: 'pos-aapl',
+      bot_id: 'bot-liquid',
+      symbol: 'AAPL',
+      quantity: 12,
+      entry_price: 227.85,
+      current_price: 228.4,
+      unrealized_pnl: 6.6,
+      realized_pnl: 0,
+      opened_at: '2026-09-22T14:05:00.000Z',
+      is_open: true,
+      score: 72,
+      veto_code: null,
+      regime: 'trend',
+      expected_cost: 2.1,
+      realized_cost: 0.55,
+      hold_minutes: 22,
+      atr_stop: 225.4,
+      target_price: 232.1,
+      open_stop_risk: 29.4,
+    },
+  ]
 }
 
 function createState(scenario: BookScenario): BookState {
   const universe = { ...defaultUniverseFilters }
+  const positions = scenario === 'empty' || scenario === 'locked' ? [] : seedPositions()
   return {
     scenario,
     universe,
@@ -285,10 +346,11 @@ function createState(scenario: BookScenario): BookState {
     risk: { ...defaultRisk },
     mode: 'paper',
     feeTier: { ...defaultFeeTier },
-    summary: summaryFor(scenario),
+    summary: withPositionTotals(summaryFor(scenario), positions),
     trades: scenario === 'empty' ? [] : sampleTrades,
     activity: vetoLogs,
     bots: seedBots(),
+    positions,
   }
 }
 
@@ -318,6 +380,12 @@ function clamp(value: number, min: number, max: number) {
 export function setBookScenario(scenario: BookScenario) {
   const current = state
   const next = createState(scenario)
+  const positions =
+    scenario === 'empty' || scenario === 'locked'
+      ? []
+      : current.positions.length > 0
+        ? current.positions
+        : seedPositions()
   emit({
     ...next,
     universe: current.universe,
@@ -327,6 +395,8 @@ export function setBookScenario(scenario: BookScenario) {
     mode: current.mode,
     feeTier: current.feeTier,
     bots: current.bots,
+    positions,
+    summary: withPositionTotals(next.summary, positions),
     snapshot: snapshotFor(current.universe, scenario === 'empty' ? [] : sampleMembers),
   })
 }
@@ -407,12 +477,8 @@ export function refreshFeeTier(): BookActionResult {
 export function flattenBook(): BookActionResult {
   emit({
     ...state,
-    summary: {
-      ...state.summary,
-      position_count: 0,
-      open_stop_risk: 0,
-      open_stop_risk_pct: 0,
-    },
+    positions: [],
+    summary: withPositionTotals(state.summary, []),
   })
   return { ok: true, message: 'Flatten sent. Open risk was closed.' }
 }
@@ -542,6 +608,20 @@ export function stopBotProfile(id: string): BookActionResult {
     bots: state.bots.map((bot) => (bot.id === id ? { ...bot, status: 'stopped' } : bot)),
   })
   return { ok: true, message: `${existing.name} stopped. Open positions stay on the book until you flatten them.` }
+}
+
+export function closeBookPosition(id: string): BookActionResult {
+  const position = state.positions.find((item) => item.id === id)
+  if (!position) {
+    return { ok: false, message: 'That position is already closed.' }
+  }
+  const positions = state.positions.filter((item) => item.id !== id)
+  emit({
+    ...state,
+    positions,
+    summary: withPositionTotals(state.summary, positions),
+  })
+  return { ok: true, message: `Closed ${position.symbol}. The bot keeps running.` }
 }
 
 export function engageKillSwitch(): BookActionResult {

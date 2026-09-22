@@ -12,7 +12,6 @@ import {
   Typography,
   useMediaQuery,
   useTheme,
-  Chip,
   Button,
   Dialog,
   DialogTitle,
@@ -25,8 +24,8 @@ import {
 import type { Position } from '@/types'
 import { formatCurrency, formatRelativeTime } from '@/utils/formatters'
 import { PnLDisplay } from '@/components/common/PnLDisplay'
-import { useBots } from '@/hooks/useBots'
-import { useClosePosition, useCloseUnmanagedPosition } from '@/hooks/usePositions'
+import { useBook } from '@/hooks/useBook'
+import { closeBookPosition } from '@/mocks/bookStore'
 
 type SortField =
   | 'symbol'
@@ -35,10 +34,19 @@ type SortField =
   | 'entry_price'
   | 'current_price'
   | 'unrealized_pnl'
-  | 'stop_loss_price'
+  | 'score'
+  | 'hold_minutes'
+  | 'atr_stop'
   | 'opened_at'
 
 type SortOrder = 'asc' | 'desc'
+
+function formatHold(minutes: number | null | undefined) {
+  if (minutes == null) return '—'
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  return hours > 0 ? `${hours}h ${rest}m` : `${rest}m`
+}
 
 interface PositionsTableProps {
   positions: Position[]
@@ -61,23 +69,18 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
 }) => {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
-  const { data: bots } = useBots()
+  const { bots } = useBook()
 
   const botNameMap = React.useMemo(() => {
     const map = new Map<string, string>()
-    bots?.forEach((bot) => map.set(bot.id, bot.name))
+    bots.forEach((bot) => map.set(bot.id, bot.name))
     return map
   }, [bots])
 
   const getBotName = (botId: string | null) => {
-    if (!botId) return null
-    return botNameMap.get(botId) || 'Unknown Bot'
+    if (!botId) return 'Book'
+    return botNameMap.get(botId) || 'Unknown bot'
   }
-
-  const isUnmanaged = (position: Position) => !position.bot_id
-
-  const closePosition = useClosePosition()
-  const closeUnmanaged = useCloseUnmanagedPosition()
   const [sellTarget, setSellTarget] = useState<Position | null>(null)
   const [snackbar, setSnackbar] = useState<{
     open: boolean
@@ -85,7 +88,7 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
     severity: 'success' | 'error'
   }>({ open: false, message: '', severity: 'success' })
 
-  const isSelling = closePosition.isPending || closeUnmanaged.isPending
+  const [isSelling, setIsSelling] = useState(false)
 
   const handleSellClick = (e: React.MouseEvent, position: Position) => {
     e.stopPropagation()
@@ -94,43 +97,15 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
 
   const handleConfirmSell = () => {
     if (!sellTarget) return
-
-    if (isUnmanaged(sellTarget)) {
-      closeUnmanaged.mutate(
-        { symbol: sellTarget.symbol, quantity: sellTarget.quantity },
-        {
-          onSuccess: () => {
-            setSnackbar({
-              open: true,
-              message: `Sold ${sellTarget.quantity} shares of ${sellTarget.symbol}.`,
-              severity: 'success',
-            })
-            setSellTarget(null)
-          },
-          onError: () => {
-            setSnackbar({ open: true, message: 'Failed to close unmanaged position.', severity: 'error' })
-            setSellTarget(null)
-          },
-        }
-      )
-    } else {
-      closePosition.mutate(
-        { positionId: sellTarget.id, pauseBot: true },
-        {
-          onSuccess: (data: any) => {
-            const msg = data.bot_paused
-              ? `Position closed. Bot '${data.bot_name}' has been paused.`
-              : 'Position closed successfully.'
-            setSnackbar({ open: true, message: msg, severity: 'success' })
-            setSellTarget(null)
-          },
-          onError: () => {
-            setSnackbar({ open: true, message: 'Failed to close position.', severity: 'error' })
-            setSellTarget(null)
-          },
-        }
-      )
-    }
+    setIsSelling(true)
+    const result = closeBookPosition(sellTarget.id)
+    setSnackbar({
+      open: true,
+      message: result.message,
+      severity: result.ok ? 'success' : 'error',
+    })
+    setSellTarget(null)
+    setIsSelling(false)
   }
 
   const [sortField, setSortField] = useState<SortField>('opened_at')
@@ -161,10 +136,13 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
     if (typeof aVal === 'string' && typeof bVal === 'string') {
       return aVal.localeCompare(bVal) * multiplier
     }
-    return ((aVal as number) - (bVal as number)) * multiplier
+    const aNum = typeof aVal === 'number' ? aVal : null
+    const bNum = typeof bVal === 'number' ? bVal : null
+    if (aNum == null && bNum == null) return 0
+    if (aNum == null) return 1
+    if (bNum == null) return -1
+    return (aNum - bNum) * multiplier
   })
-
-  const sellIsUnmanaged = sellTarget ? isUnmanaged(sellTarget) : false
 
   const confirmDialog = (
     <>
@@ -174,14 +152,11 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
         maxWidth="xs"
         fullWidth
       >
-        <DialogTitle sx={{ fontWeight: 700 }}>Emergency Sell</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700 }}>Close position</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Sell all <strong>{sellTarget?.quantity}</strong> shares of{' '}
-            <strong>{sellTarget?.symbol}</strong> at market price?
-            {sellTarget?.bot_id && (
-              <> Bot &apos;{getBotName(sellTarget.bot_id)}&apos; will be paused.</>
-            )}
+            Close <strong>{sellTarget?.quantity}</strong> shares of{' '}
+            <strong>{sellTarget?.symbol}</strong>? The bot stays running. Open risk leaves the book.
           </DialogContentText>
         </DialogContent>
         <DialogActions>
@@ -192,7 +167,7 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
             color="error"
             disabled={isSelling}
           >
-            {sellIsUnmanaged ? 'Sell' : 'Sell & Pause Bot'}
+            Close position
           </Button>
         </DialogActions>
       </Dialog>
@@ -286,21 +261,33 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
               onSort={handleSort}
               align="right"
             />
+            <TableCell sx={{ fontWeight: 'bold' }}>Regime</TableCell>
             <SortableHeader
-              label="Stop Loss"
-              field="stop_loss_price"
+              label="Score"
+              field="score"
+              currentSort={sortField}
+              currentOrder={sortOrder}
+              onSort={handleSort}
+              align="right"
+            />
+            <TableCell sx={{ fontWeight: 'bold' }}>Veto</TableCell>
+            <SortableHeader
+              label="Hold"
+              field="hold_minutes"
               currentSort={sortField}
               currentOrder={sortOrder}
               onSort={handleSort}
               align="right"
             />
             <SortableHeader
-              label="Opened"
-              field="opened_at"
+              label="ATR stop"
+              field="atr_stop"
               currentSort={sortField}
               currentOrder={sortOrder}
               onSort={handleSort}
+              align="right"
             />
+            <TableCell align="right" sx={{ fontWeight: 'bold' }}>Target</TableCell>
             <TableCell align="center" sx={{ fontWeight: 'bold', width: 80 }}>
               Action
             </TableCell>
@@ -370,35 +357,14 @@ const PositionRow: React.FC<{
       }}
     >
       <TableCell>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-          <Typography variant="body1" fontWeight={600}>
-            {position.symbol}
-          </Typography>
-          {position.entry_indicator && (
-            <Chip
-              label={position.entry_indicator}
-              size="small"
-              color="info"
-              variant="outlined"
-              sx={{ height: 20, fontSize: '0.7rem' }}
-            />
-          )}
-        </Box>
+        <Typography variant="body1" fontWeight={600}>
+          {position.symbol}
+        </Typography>
       </TableCell>
       <TableCell>
-        {position.bot_id ? (
-          <Typography variant="body2" color="text.secondary">
-            {getBotName(position.bot_id)}
-          </Typography>
-        ) : (
-          <Chip
-            label="Unmanaged"
-            size="small"
-            color="warning"
-            variant="filled"
-            sx={{ height: 22, fontSize: '0.7rem', fontWeight: 600 }}
-          />
-        )}
+        <Typography variant="body2" color="text.secondary">
+          {getBotName(position.bot_id)}
+        </Typography>
       </TableCell>
       <TableCell align="right">
         <Typography variant="body1">{position.quantity}</Typography>
@@ -421,20 +387,28 @@ const PositionRow: React.FC<{
           size="small"
         />
       </TableCell>
+      <TableCell>
+        <Typography variant="body2">{position.regime ?? '—'}</Typography>
+      </TableCell>
       <TableCell align="right">
-        {position.stop_loss_price ? (
-          <Typography variant="body2" color="error.main">
-            {formatCurrency(position.stop_loss_price)}
-          </Typography>
-        ) : (
-          <Typography variant="body2" color="text.secondary">
-            —
-          </Typography>
-        )}
+        <Typography variant="body2">{position.score ?? '—'}</Typography>
       </TableCell>
       <TableCell>
         <Typography variant="body2" color="text.secondary">
-          {position.opened_at ? formatRelativeTime(position.opened_at) : '—'}
+          {position.veto_code ?? '—'}
+        </Typography>
+      </TableCell>
+      <TableCell align="right">
+        <Typography variant="body2">{formatHold(position.hold_minutes)}</Typography>
+      </TableCell>
+      <TableCell align="right">
+        <Typography variant="body2" color="error.main">
+          {position.atr_stop != null ? formatCurrency(position.atr_stop) : '—'}
+        </Typography>
+      </TableCell>
+      <TableCell align="right">
+        <Typography variant="body2" color="success.main">
+          {position.target_price != null ? formatCurrency(position.target_price) : '—'}
         </Typography>
       </TableCell>
       <TableCell align="center">
@@ -452,7 +426,7 @@ const PositionRow: React.FC<{
             textTransform: 'none',
           }}
         >
-          SELL
+          Close
         </Button>
       </TableCell>
     </TableRow>
@@ -497,33 +471,12 @@ const PositionCard: React.FC<{
         }}
       >
         <Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-            <Typography variant="h3" sx={{ fontWeight: 'bold' }}>
-              {position.symbol}
-            </Typography>
-            {position.entry_indicator && (
-              <Chip
-                label={position.entry_indicator}
-                size="small"
-                color="info"
-                variant="outlined"
-                sx={{ height: 20, fontSize: '0.7rem' }}
-              />
-            )}
-          </Box>
-          {position.bot_id ? (
-            <Typography variant="body2" color="text.secondary">
-              {getBotName(position.bot_id)}
-            </Typography>
-          ) : (
-            <Chip
-              label="Unmanaged"
-              size="small"
-              color="warning"
-              variant="filled"
-              sx={{ height: 20, fontSize: '0.65rem', fontWeight: 600 }}
-            />
-          )}
+          <Typography variant="h3" sx={{ fontWeight: 'bold' }}>
+            {position.symbol}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {getBotName(position.bot_id)}
+          </Typography>
         </Box>
         <PnLDisplay
           amount={position.unrealized_pnl}
@@ -565,21 +518,37 @@ const PositionCard: React.FC<{
         </Box>
         <Box>
           <Typography variant="body2" color="text.secondary">
-            Stop Loss
+            Regime
           </Typography>
-          {position.stop_loss_price ? (
-            <Chip
-              label={formatCurrency(position.stop_loss_price)}
-              size="small"
-              color="error"
-              variant="outlined"
-              sx={{ height: 22 }}
-            />
-          ) : (
-            <Typography variant="body1" color="text.secondary">
-              —
-            </Typography>
-          )}
+          <Typography variant="body1">{position.regime ?? '—'}</Typography>
+        </Box>
+        <Box>
+          <Typography variant="body2" color="text.secondary">
+            Score
+          </Typography>
+          <Typography variant="body1">{position.score ?? '—'}</Typography>
+        </Box>
+        <Box>
+          <Typography variant="body2" color="text.secondary">
+            Hold
+          </Typography>
+          <Typography variant="body1">{formatHold(position.hold_minutes)}</Typography>
+        </Box>
+        <Box>
+          <Typography variant="body2" color="text.secondary">
+            ATR stop
+          </Typography>
+          <Typography variant="body1" color="error.main">
+            {position.atr_stop != null ? formatCurrency(position.atr_stop) : '—'}
+          </Typography>
+        </Box>
+        <Box>
+          <Typography variant="body2" color="text.secondary">
+            Target
+          </Typography>
+          <Typography variant="body1" color="success.main">
+            {position.target_price != null ? formatCurrency(position.target_price) : '—'}
+          </Typography>
         </Box>
       </Box>
 
@@ -601,7 +570,7 @@ const PositionCard: React.FC<{
             textTransform: 'none',
           }}
         >
-          SELL
+          Close
         </Button>
       </Box>
     </Paper>

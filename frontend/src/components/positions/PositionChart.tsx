@@ -134,6 +134,28 @@ export const PositionChart: React.FC<PositionChartProps> = ({ position }) => {
       })
     }
 
+    if (position.atr_stop != null) {
+      areaSeries.createPriceLine({
+        price: position.atr_stop,
+        color: '#f44336',
+        lineWidth: 1,
+        lineStyle: 2,
+        axisLabelVisible: true,
+        title: 'ATR stop',
+      })
+    }
+
+    if (position.target_price != null) {
+      areaSeries.createPriceLine({
+        price: position.target_price,
+        color: '#2e7d32',
+        lineWidth: 1,
+        lineStyle: 2,
+        axisLabelVisible: true,
+        title: 'Target',
+      })
+    }
+
     // Add take profit line
     if (position.take_profit_price) {
       areaSeries.createPriceLine({
