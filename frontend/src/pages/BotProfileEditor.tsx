@@ -4,6 +4,7 @@ import { Alert, Box, Snackbar, Stack, TextField, Typography } from '@mui/materia
 import { Button } from '@/components/common'
 import UniversePreview from '@/components/settings/UniversePreview'
 import { useBook } from '@/hooks/useBook'
+import { useRealtimeDashboard } from '@/hooks/useRealtimeDashboard'
 import {
   clampBotRisk,
   clampUniverseFilters,
@@ -24,6 +25,7 @@ const BotProfileEditor = () => {
 const BotProfileEditorForm = ({ botId }: { botId?: string }) => {
   const navigate = useNavigate()
   const book = useBook()
+  useRealtimeDashboard()
   const existing = book.bots.find((bot) => bot.id === botId)
   const missing = Boolean(botId) && !existing
 
@@ -32,7 +34,12 @@ const BotProfileEditorForm = ({ botId }: { botId?: string }) => {
   const [risk, setRisk] = useState<BotRiskParameters>(existing?.risk ?? clampBotRisk(defaultBotRisk, book.risk))
   const [notice, setNotice] = useState<BookActionResult | null>(null)
 
-  const snapshot = previewUniverse(universe)
+  const filtersMatch =
+    existing != null &&
+    existing.universe.top_n === universe.top_n &&
+    existing.universe.min_price === universe.min_price &&
+    existing.universe.max_spread_bps === universe.max_spread_bps
+  const snapshot = filtersMatch ? existing.snapshot : previewUniverse(universe)
   const ceiling = book.risk
 
   const save = () => {

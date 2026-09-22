@@ -10,6 +10,7 @@ import {
   saveRisk,
   saveUniverseFilters,
   setBookScenario,
+  applyBookSocketEvent,
   closeBookPosition,
   startBotProfile,
   unlockBook,
@@ -54,6 +55,32 @@ describe('book store', () => {
     expect(createdBot?.risk.sleeve_loss_limit_pct).toBe(-2)
     setBookScenario('locked')
     expect(startBotProfile(createdBot!.id).ok).toBe(false)
+  })
+
+  it('applies a risk lock and refreshes universe membership', () => {
+    expect(getBookState().snapshot.members.length).toBeGreaterThan(2)
+    applyBookSocketEvent('risk_event', {
+      throttle_stage: 'locked',
+      marked_daily_pnl: -105,
+      marked_daily_pnl_pct: -2.1,
+      locked: true,
+      halted: true,
+    })
+    expect(getBookState().summary.throttle_stage).toBe('locked')
+    expect(getBookState().summary.kill_switch.locked).toBe(true)
+    expect(getBookState().positions).toHaveLength(0)
+
+    setBookScenario('empty')
+    setBookScenario('normal')
+    applyBookSocketEvent('universe_updated', {
+      as_of: '2026-09-22T15:05:00.000Z',
+      members: [
+        { symbol: 'NVDA', price: 121.4, dollar_volume: 21_000_000_000, spread_bps: 1.8 },
+        { symbol: 'AAPL', price: 229.1, dollar_volume: 9_100_000_000, spread_bps: 1.1 },
+      ],
+    })
+    expect(getBookState().snapshot.members.map((member) => member.symbol)).toEqual(['NVDA', 'AAPL'])
+    expect(getBookState().bots.find((bot) => bot.id === 'bot-liquid')?.snapshot.members).toHaveLength(2)
   })
 
   it('closes a book position without stopping its bot', () => {

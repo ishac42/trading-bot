@@ -1,46 +1,44 @@
-import { useEffect, useCallback } from 'react'
+import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { applyBookSocketEvent } from '@/mocks/bookStore'
+import { subscribeBookEvent } from '@/services/bookEvents'
+import type { BookSocketEvent } from '@/types'
 import { useWebSocket } from './useWebSocket'
-import type { Trade } from '@/types'
+
+const BOOK_EVENTS: BookSocketEvent[] = [
+  'trade_executed',
+  'position_updated',
+  'price_update',
+  'risk_event',
+  'regime_changed',
+  'data_health',
+  'universe_updated',
+]
 
 /**
- * Subscribes the dashboard to book events.
- * Product events are risk, regime, and data health. Bot status is not a product event.
+ * Applies book socket events to the store the screens render.
+ * Bot status is not a product event.
  */
 export const useRealtimeDashboard = () => {
   const { isConnected, subscribe } = useWebSocket()
   const queryClient = useQueryClient()
 
-  const handleTradeExecuted = useCallback(
-    (trade: Trade) => {
-      queryClient.setQueryData<Trade[]>(['recentTrades', 10], (old) => {
-        if (!old) return [trade]
-        return [trade, ...old].slice(0, 10)
-      })
-      queryClient.invalidateQueries({ queryKey: ['summaryStats'] })
-    },
-    [queryClient]
-  )
-
-  const refreshBook = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ['book-summary'] })
-  }, [queryClient])
-
   useEffect(() => {
-    const unsubTrade = subscribe('trade_executed', handleTradeExecuted)
-    const unsubPosition = subscribe('position_updated', refreshBook)
-    const unsubRisk = subscribe('risk_event', refreshBook)
-    const unsubRegime = subscribe('regime_changed', refreshBook)
-    const unsubHealth = subscribe('data_health', refreshBook)
-
-    return () => {
-      unsubTrade()
-      unsubPosition()
-      unsubRisk()
-      unsubRegime()
-      unsubHealth()
+    const apply = (event: BookSocketEvent) => (payload: unknown) => {
+      applyBookSocketEvent(event, payload)
+      queryClient.invalidateQueries({ queryKey: ['book-summary'] })
+      if (event === 'universe_updated') queryClient.invalidateQueries({ queryKey: ['universe'] })
+      if (event === 'trade_executed') queryClient.invalidateQueries({ queryKey: ['trades'] })
+      if (event === 'position_updated' || event === 'price_update') {
+        queryClient.invalidateQueries({ queryKey: ['positions'] })
+      }
     }
-  }, [subscribe, handleTradeExecuted, refreshBook])
+
+    const unsubs = BOOK_EVENTS.flatMap((event) => [subscribe(event, apply(event)), subscribeBookEvent(event, apply(event))])
+    return () => {
+      unsubs.forEach((unsub) => unsub())
+    }
+  }, [subscribe, queryClient])
 
   return { isConnected }
 }

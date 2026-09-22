@@ -16,13 +16,14 @@ export type WebSocketEvent =
   | 'data_health'
   | 'universe_updated'
 
-export type WebSocketEventHandler = (data: any) => void
+export type WebSocketEventHandler = (data: unknown) => void
 
 class WebSocketService {
   private socket: Socket | null = null
   private reconnectAttempts = 0
   private maxReconnectAttempts = 5
   private reconnectDelay = 1000
+  private pending: { event: WebSocketEvent; handler: WebSocketEventHandler }[] = []
 
   connect(): void {
     if (!WS_ENABLED) {
@@ -58,6 +59,11 @@ class WebSocketService {
       console.error('WebSocket connection error:', error)
       this.reconnectAttempts++
     })
+
+    for (const item of this.pending) {
+      this.socket.on(item.event, item.handler)
+    }
+    this.pending = []
   }
 
   disconnect(): void {
@@ -70,10 +76,15 @@ class WebSocketService {
   on(event: WebSocketEvent, handler: WebSocketEventHandler): void {
     if (this.socket) {
       this.socket.on(event, handler)
+      return
     }
+    this.pending.push({ event, handler })
   }
 
   off(event: WebSocketEvent, handler?: WebSocketEventHandler): void {
+    this.pending = this.pending.filter(
+      (item) => item.event !== event || (handler != null && item.handler !== handler)
+    )
     if (this.socket) {
       if (handler) {
         this.socket.off(event, handler)
@@ -83,7 +94,7 @@ class WebSocketService {
     }
   }
 
-  emit(event: string, data: any): void {
+  emit(event: string, data: unknown): void {
     if (this.socket?.connected) {
       this.socket.emit(event, data)
     }

@@ -1,15 +1,17 @@
-import { Alert, Box, Button, FormControl, InputLabel, MenuItem, Select, Typography } from '@mui/material'
+import { Alert, Box, Button, FormControl, InputLabel, MenuItem, Select, Stack, Typography } from '@mui/material'
 import { useNavigate } from 'react-router-dom'
 import LinkIcon from '@mui/icons-material/Link'
 import { AccountSummary, RecentTradesTable } from '@/components/dashboard'
 import BookSummary from '@/components/dashboard/BookSummary'
 import RunningBots from '@/components/dashboard/RunningBots'
 import BookControls from '@/components/settings/BookControls'
+import UniversePreview from '@/components/settings/UniversePreview'
 import { useBook } from '@/hooks/useBook'
 import { useRealtimeDashboard } from '@/hooks/useRealtimeDashboard'
 import { useSettings } from '@/hooks/useSettings'
 import { useAccount } from '@/hooks/useAccount'
 import { BOOK_USE_MOCK, setBookScenario } from '@/mocks/bookStore'
+import { publishBookEvent } from '@/services/bookEvents'
 import type { BookScenario } from '@/types'
 
 const Dashboard = () => {
@@ -70,6 +72,41 @@ const Dashboard = () => {
         </FormControl>
       )}
 
+      {BOOK_USE_MOCK && (
+        <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() =>
+              publishBookEvent('risk_event', {
+                throttle_stage: 'locked',
+                marked_daily_pnl: -105,
+                marked_daily_pnl_pct: -2.1,
+                locked: true,
+                halted: true,
+              })
+            }
+          >
+            Emit risk lock
+          </Button>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() =>
+              publishBookEvent('universe_updated', {
+                as_of: '2026-09-22T15:05:00.000Z',
+                members: [
+                  { symbol: 'NVDA', price: 121.4, dollar_volume: 21_000_000_000, spread_bps: 1.8 },
+                  { symbol: 'AAPL', price: 229.1, dollar_volume: 9_100_000_000, spread_bps: 1.1 },
+                ],
+              })
+            }
+          >
+            Emit universe update
+          </Button>
+        </Stack>
+      )}
+
       <Box sx={{ mb: { xs: 3, md: 4 } }}>
         <AccountSummary />
       </Box>
@@ -84,6 +121,10 @@ const Dashboard = () => {
 
       <Box sx={{ mb: { xs: 3, md: 4 } }}>
         <RunningBots bots={book.bots} />
+      </Box>
+
+      <Box sx={{ mb: { xs: 3, md: 4 } }}>
+        <UniversePreview snapshot={book.snapshot} />
       </Box>
 
       <Box sx={{ mb: { xs: 3, md: 4 } }}>

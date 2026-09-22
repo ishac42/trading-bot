@@ -13,7 +13,14 @@ import type {
   SessionSettings,
   Trade,
   UniverseFilters,
+  UniverseMember,
   UniverseSnapshot,
+  BookSocketEvent,
+  DataHealthPayload,
+  PriceUpdatePayload,
+  RegimeChangedPayload,
+  RiskEventPayload,
+  UniverseUpdatedPayload,
 } from '@/types'
 
 /** Book screens read this store until the control-plane API exists. */
@@ -652,6 +659,109 @@ export function closeBookPosition(id: string): BookActionResult {
     summary: withPositionTotals(state.summary, positions),
   })
   return { ok: true, message: `Closed ${position.symbol}. The bot keeps running.` }
+}
+
+function snapshotFromMembers(filters: UniverseFilters, asOf: string, members: UniverseMember[]): UniverseSnapshot {
+  return {
+    as_of: asOf,
+    filters: { ...filters },
+    members: members.filter(
+      (member) => member.price >= filters.min_price && member.spread_bps <= filters.max_spread_bps
+    ),
+  }
+}
+
+export function applyBookSocketEvent(event: BookSocketEvent, payload: unknown): void {
+  if (event === 'risk_event') {
+    const data = payload as RiskEventPayload
+    const locked =
+      data.locked ?? (data.throttle_stage === 'locked' ? true : state.summary.kill_switch.locked)
+    const positions = locked ? [] : state.positions
+    emit({
+      ...state,
+      positions,
+      summary: withPositionTotals(
+        {
+          ...state.summary,
+          throttle_stage: data.throttle_stage ?? (locked ? 'locked' : state.summary.throttle_stage),
+          marked_daily_pnl: data.marked_daily_pnl ?? state.summary.marked_daily_pnl,
+          marked_daily_pnl_pct: data.marked_daily_pnl_pct ?? state.summary.marked_daily_pnl_pct,
+          kill_switch: {
+            halted: data.halted ?? (locked || state.summary.kill_switch.halted),
+            locked,
+          },
+        },
+        positions
+      ),
+    })
+    return
+  }
+
+  if (event === 'regime_changed') {
+    const data = payload as RegimeChangedPayload
+    emit({ ...state, summary: { ...state.summary, regime: data.regime } })
+    return
+  }
+
+  if (event === 'data_health') {
+    const data = payload as DataHealthPayload
+    emit({
+      ...state,
+      summary: {
+        ...state.summary,
+        data_freshness: {
+          stale: data.stale,
+          age_seconds: data.age_seconds,
+          feed: data.feed ?? state.summary.data_freshness.feed,
+        },
+      },
+    })
+    return
+  }
+
+  if (event === 'universe_updated') {
+    const data = payload as UniverseUpdatedPayload
+    emit({
+      ...state,
+      snapshot: snapshotFromMembers(state.universe, data.as_of, data.members),
+      bots: state.bots.map((bot) => ({
+        ...bot,
+        snapshot: snapshotFromMembers(bot.universe, data.as_of, data.members),
+      })),
+    })
+    return
+  }
+
+  if (event === 'trade_executed') {
+    const trade = payload as Trade
+    if (state.trades.some((item) => item.id === trade.id)) return
+    emit({ ...state, trades: [trade, ...state.trades] })
+    return
+  }
+
+  if (event === 'position_updated') {
+    const update = payload as Partial<Position> & { id: string }
+    emit({
+      ...state,
+      positions: state.positions.map((position) =>
+        position.id === update.id ? { ...position, ...update } : position
+      ),
+    })
+    return
+  }
+
+  if (event === 'price_update') {
+    const data = payload as PriceUpdatePayload
+    const positions = state.positions.map((position) => {
+      if (position.symbol !== data.symbol || !position.is_open) return position
+      return {
+        ...position,
+        current_price: data.price,
+        unrealized_pnl: (data.price - position.entry_price) * position.quantity,
+      }
+    })
+    emit({ ...state, positions, summary: withPositionTotals(state.summary, positions) })
+  }
 }
 
 export function engageKillSwitch(): BookActionResult {

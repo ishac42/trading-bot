@@ -527,3 +527,31 @@ export type BookSocketEvent =
   | 'regime_changed'
   | 'data_health'
   | 'universe_updated'
+
+export interface RiskEventPayload {
+  throttle_stage?: ThrottleStage
+  marked_daily_pnl?: number
+  marked_daily_pnl_pct?: number
+  locked?: boolean
+  halted?: boolean
+}
+
+export interface RegimeChangedPayload {
+  regime: MarketRegime | null
+}
+
+export interface DataHealthPayload {
+  stale: boolean
+  age_seconds: number | null
+  feed?: 'sip' | 'iex'
+}
+
+export interface UniverseUpdatedPayload {
+  as_of: string
+  members: UniverseMember[]
+}
+
+export interface PriceUpdatePayload {
+  symbol: string
+  price: number
+}

@@ -9,11 +9,13 @@ import {
 import type { PositionFilterValues } from '@/components/positions'
 import { EmptyState } from '@/components/common/EmptyState'
 import { useBook } from '@/hooks/useBook'
+import { useRealtimeDashboard } from '@/hooks/useRealtimeDashboard'
 import { closeBookPosition } from '@/mocks/bookStore'
 import type { Position } from '@/types'
 
 const Positions: React.FC = () => {
   const { positions, bots } = useBook()
+  useRealtimeDashboard()
   const [filters, setFilters] = useState<PositionFilterValues>({
     botId: '',
     symbol: '',

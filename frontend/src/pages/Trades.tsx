@@ -6,6 +6,7 @@ import TableChartIcon from '@mui/icons-material/TableChart'
 import { useSearchParams } from 'react-router-dom'
 import { TradeFilters, TradeTable, TradeDetailModal, TradeAnalysis } from '@/components/trades'
 import { useBook } from '@/hooks/useBook'
+import { useRealtimeDashboard } from '@/hooks/useRealtimeDashboard'
 import { exportTradesToCsv } from '@/utils/csvExport'
 import { filterBookTrades, paginateTrades, sortBookTrades, summarizeBookTrades } from '@/utils/bookTrades'
 import type { Trade, TradeFilters as TradeFiltersType, TradeSort, DateRangePreset, TradeTypeFilter } from '@/types'
@@ -35,6 +36,7 @@ function filtersToParams(filters: TradeFiltersType): URLSearchParams {
 const Trades: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const { trades, bots } = useBook()
+  useRealtimeDashboard()
   const filters = useMemo(() => parseFiltersFromParams(searchParams), [searchParams])
   const [sort, setSort] = useState<TradeSort>({ field: 'timestamp', direction: 'desc' })
   const [page, setPage] = useState(1)
