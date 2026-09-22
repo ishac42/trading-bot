@@ -142,6 +142,40 @@ function summaryFor(scenario: BookScenario): BookSummary {
   return base
 }
 
+export function completeSummary(raw: Partial<BookSummary> | null | undefined): BookSummary {
+  const base = summaryFor('normal')
+  const incoming = raw ?? {}
+  const freshness = incoming.data_freshness
+  const kill = incoming.kill_switch
+  const throttle = incoming.throttle_stage
+  return {
+    ...base,
+    ...incoming,
+    equity: incoming.equity ?? base.equity,
+    marked_daily_pnl: incoming.marked_daily_pnl ?? base.marked_daily_pnl,
+    marked_daily_pnl_pct: incoming.marked_daily_pnl_pct ?? base.marked_daily_pnl_pct,
+    daily_lock_pct: incoming.daily_lock_pct ?? base.daily_lock_pct,
+    throttle_stage:
+      throttle === 'half' || throttle === 'stop_new' || throttle === 'locked' || throttle === 'normal'
+        ? throttle
+        : base.throttle_stage,
+    open_stop_risk: incoming.open_stop_risk ?? base.open_stop_risk,
+    open_stop_risk_pct: incoming.open_stop_risk_pct ?? base.open_stop_risk_pct,
+    position_count: incoming.position_count ?? base.position_count,
+    max_positions: incoming.max_positions ?? base.max_positions,
+    regime: incoming.regime === undefined ? base.regime : incoming.regime,
+    data_freshness: {
+      stale: freshness?.stale ?? base.data_freshness.stale,
+      age_seconds: freshness?.age_seconds ?? base.data_freshness.age_seconds,
+      feed: freshness?.feed === 'iex' ? 'iex' : 'sip',
+    },
+    kill_switch: {
+      halted: kill?.halted ?? base.kill_switch.halted,
+      locked: kill?.locked ?? base.kill_switch.locked,
+    },
+  }
+}
+
 export const defaultBotRisk: BotRiskParameters = {
   risk_per_trade_pct: 0.25,
   max_open_stop_risk_pct: 0.75,
@@ -378,9 +412,11 @@ export function applyPersistedBook(partial: {
   summary?: BookSummary
 }) {
   const risk = { ...defaultRisk, ...(partial.risk ?? state.risk ?? {}) }
-  const summary = partial.summary
-    ? { ...partial.summary, max_positions: risk.max_positions, daily_lock_pct: risk.hard_daily_lock_pct }
-    : { ...state.summary, max_positions: risk.max_positions, daily_lock_pct: risk.hard_daily_lock_pct }
+  const summary = completeSummary({
+    ...(partial.summary ? { ...state.summary, ...partial.summary } : state.summary),
+    max_positions: risk.max_positions,
+    daily_lock_pct: risk.hard_daily_lock_pct,
+  })
   emit({
     ...state,
     universe: partial.universe ?? state.universe,
@@ -606,17 +642,18 @@ export function applyBookSocketEvent(event: BookSocketEvent, payload: unknown): 
   }
 
   if (event === 'data_health') {
-    const data = payload as DataHealthPayload
+    const data = (payload ?? {}) as Partial<DataHealthPayload>
+    const current = state.summary.data_freshness
     emit({
       ...state,
-      summary: {
+      summary: completeSummary({
         ...state.summary,
         data_freshness: {
-          stale: data.stale,
-          age_seconds: data.age_seconds,
-          feed: data.feed ?? state.summary.data_freshness.feed,
+          stale: data.stale ?? current?.stale ?? true,
+          age_seconds: data.age_seconds ?? current?.age_seconds ?? null,
+          feed: data.feed ?? current?.feed ?? 'sip',
         },
-      },
+      }),
     })
     return
   }

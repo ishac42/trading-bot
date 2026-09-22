@@ -75,7 +75,7 @@ const Settings = () => {
       case 'feed':
         return <FeedSettings feed={book.feed} feeTier={book.feeTier} />
       case 'risk':
-        return <RiskCaps risk={book.risk} killSwitch={book.summary.kill_switch} />
+        return <RiskCaps risk={book.risk} killSwitch={book.summary.kill_switch ?? { halted: false, locked: false }} />
       case 'mode':
         return <AccountModeSettings mode={book.mode} />
       case 'broker':

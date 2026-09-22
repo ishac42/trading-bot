@@ -13,9 +13,11 @@ import {
   saveUniverseFilters,
   setBookScenario,
   applyBookSocketEvent,
+  applyPersistedBook,
   applyServerBot,
   applyServerBots,
   completeBot,
+  completeSummary,
   botListEpochNow,
   bumpBotListEpoch,
   closeBookPosition,
@@ -23,6 +25,7 @@ import {
   unlockBook,
 } from './bookStore'
 import { sampleBots, samplePositions } from '@/test-fixtures/bookSample'
+import type { BookSummary } from '@/types'
 
 beforeEach(() => {
   resetBook()
@@ -111,6 +114,18 @@ describe('book store', () => {
     expect(saved.snapshot.members).toEqual([])
     applyServerBots([saved], botListEpochNow())
     expect(getBookState().bots[0]?.risk.risk_per_trade_pct).toBe(0.25)
+  })
+
+  it('fills data freshness when a summary payload omits it', () => {
+    const saved = completeSummary({ equity: 1000 } as BookSummary)
+    expect(saved.data_freshness.stale).toBe(true)
+    expect(saved.kill_switch.locked).toBe(false)
+    applyPersistedBook({ summary: saved })
+    applyPersistedBook({ summary: { equity: 2500 } as BookSummary })
+    expect(getBookState().summary.equity).toBe(2500)
+    expect(getBookState().summary.data_freshness.stale).toBe(true)
+    applyBookSocketEvent('data_health', undefined)
+    expect(getBookState().summary.data_freshness.stale).toBe(true)
   })
 
   it('keeps a saved bot when an older list response arrives', () => {

@@ -60,7 +60,7 @@ const Dashboard = () => {
       </Box>
 
       <Box sx={{ mb: { xs: 3, md: 4 } }}>
-        <BookControls killSwitch={book.summary.kill_switch} compact />
+        <BookControls killSwitch={book.summary.kill_switch ?? { halted: false, locked: false }} compact />
       </Box>
 
       <Box sx={{ mb: { xs: 3, md: 4 } }}>

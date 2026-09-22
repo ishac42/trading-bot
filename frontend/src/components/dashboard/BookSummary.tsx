@@ -42,7 +42,8 @@ const BookSummary = ({ summary, isLoading = false }: BookSummaryProps) => {
     100,
     Math.max(0, (Math.abs(Math.min(summary.marked_daily_pnl_pct, 0)) / Math.abs(summary.daily_lock_pct)) * 100)
   )
-  const freshness = summary.data_freshness
+  const freshness = summary.data_freshness ?? { stale: true, age_seconds: null, feed: 'sip' as const }
+  const kill = summary.kill_switch ?? { halted: false, locked: false }
   const empty = summary.position_count === 0 && summary.open_stop_risk === 0
 
   return (
@@ -53,12 +54,12 @@ const BookSummary = ({ summary, isLoading = false }: BookSummaryProps) => {
           {freshness.age_seconds != null ? ` (${freshness.age_seconds}s)` : ''}. New risk is frozen until quotes recover.
         </Alert>
       )}
-      {summary.kill_switch.locked && (
+      {kill.locked && (
         <Alert severity="error" sx={{ mb: 2 }}>
           The book is locked at the {formatPercentage(summary.daily_lock_pct, false)} daily-loss line. New entries are refused.
         </Alert>
       )}
-      {empty && !summary.kill_switch.locked && (
+      {empty && !kill.locked && (
         <Alert severity="info" sx={{ mb: 2 }}>
           No open risk. The book is flat.
         </Alert>
@@ -144,11 +145,11 @@ const BookSummary = ({ summary, isLoading = false }: BookSummaryProps) => {
             <Typography variant="body2" color="text.secondary">
               Kill switch
             </Typography>
-            <Typography variant="h6" fontWeight={700} color={summary.kill_switch.halted ? 'error.main' : 'success.main'}>
-              {summary.kill_switch.halted ? 'Halted' : 'Armed'}
+            <Typography variant="h6" fontWeight={700} color={kill.halted ? 'error.main' : 'success.main'}>
+              {kill.halted ? 'Halted' : 'Armed'}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              {summary.kill_switch.locked ? 'Daily lock is on' : 'Not locked'}
+              {kill.locked ? 'Daily lock is on' : 'Not locked'}
             </Typography>
           </Card>
         </Grid>
