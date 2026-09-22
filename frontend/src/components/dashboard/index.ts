@@ -5,5 +5,4 @@
  */
 
 export { AccountSummary } from './AccountSummary'
-export { SummaryCards } from './SummaryCards'
 export { RecentTradesTable } from './RecentTradesTable'

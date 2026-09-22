@@ -6,6 +6,8 @@ import {
   flattenBook,
   getBookState,
   lockBook,
+  replaceBookSlice,
+  resetBook,
   saveMode,
   saveRisk,
   saveUniverseFilters,
@@ -15,13 +17,13 @@ import {
   startBotProfile,
   unlockBook,
 } from './bookStore'
+import { sampleBots, samplePositions } from '@/test-fixtures/bookSample'
 
 beforeEach(() => {
+  resetBook()
   saveUniverseFilters({ top_n: 75, min_price: 5, max_spread_bps: 12 })
   saveRisk(defaultRisk)
   saveMode('paper')
-  setBookScenario('empty')
-  setBookScenario('normal')
 })
 
 describe('book store', () => {
@@ -58,7 +60,7 @@ describe('book store', () => {
   })
 
   it('applies a risk lock and refreshes universe membership', () => {
-    expect(getBookState().snapshot.members.length).toBeGreaterThan(2)
+    expect(getBookState().snapshot.members).toHaveLength(0)
     applyBookSocketEvent('risk_event', {
       throttle_stage: 'locked',
       marked_daily_pnl: -105,
@@ -70,8 +72,7 @@ describe('book store', () => {
     expect(getBookState().summary.kill_switch.locked).toBe(true)
     expect(getBookState().positions).toHaveLength(0)
 
-    setBookScenario('empty')
-    setBookScenario('normal')
+    resetBook()
     applyBookSocketEvent('universe_updated', {
       as_of: '2026-09-22T15:05:00.000Z',
       members: [
@@ -80,10 +81,14 @@ describe('book store', () => {
       ],
     })
     expect(getBookState().snapshot.members.map((member) => member.symbol)).toEqual(['NVDA', 'AAPL'])
-    expect(getBookState().bots.find((bot) => bot.id === 'bot-liquid')?.snapshot.members).toHaveLength(2)
   })
 
   it('closes a book position without stopping its bot', () => {
+    replaceBookSlice({
+      bots: sampleBots.filter((bot) => bot.id === 'bot-liquid'),
+      positions: samplePositions,
+      summary: { ...getBookState().summary, equity: 5000 },
+    })
     const before = getBookState().positions[0]
     const riskBefore = getBookState().summary.open_stop_risk
     expect(before).toBeDefined()

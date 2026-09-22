@@ -3,7 +3,8 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { ThemeProvider, createTheme } from '@mui/material/styles'
 import { PositionsSummary } from '@/components/positions/PositionsSummary'
 import { PositionsTable } from '@/components/positions/PositionsTable'
-import { getBookState, setBookScenario } from '@/mocks/bookStore'
+import { getBookState, replaceBookSlice, resetBook } from '@/mocks/bookStore'
+import { sampleBots, samplePositions } from '@/test-fixtures/bookSample'
 
 beforeAll(() => {
   Object.defineProperty(window, 'matchMedia', {
@@ -22,8 +23,12 @@ beforeAll(() => {
 })
 
 beforeEach(() => {
-  setBookScenario('empty')
-  setBookScenario('normal')
+  resetBook()
+  replaceBookSlice({
+    bots: sampleBots.filter((bot) => bot.id === 'bot-liquid'),
+    positions: samplePositions,
+    summary: { ...getBookState().summary, equity: 5000 },
+  })
 })
 
 function renderPositions() {

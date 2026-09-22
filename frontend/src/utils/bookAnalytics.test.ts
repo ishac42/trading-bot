@@ -1,19 +1,14 @@
-import { beforeEach, describe, expect, it } from 'vitest'
-import { getBookState, setBookScenario } from '@/mocks/bookStore'
+import { describe, expect, it } from 'vitest'
 import { buildBookAnalytics } from './bookAnalytics'
+import { sampleBots, sampleTrades } from '@/test-fixtures/bookSample'
 
 const now = new Date('2026-09-22T16:00:00.000Z')
-
-beforeEach(() => {
-  setBookScenario('empty')
-  setBookScenario('normal')
-})
+const bots = sampleBots.map((bot) => ({ id: bot.id, name: bot.name }))
 
 function analytics(timeRange: 'ALL' | '1W' = 'ALL') {
-  const state = getBookState()
-  return buildBookAnalytics(state.trades, {
-    equity: state.summary.equity,
-    bots: state.bots.map((bot) => ({ id: bot.id, name: bot.name })),
+  return buildBookAnalytics(sampleTrades, {
+    equity: 5000,
+    bots,
     timeRange,
     now,
   })
@@ -33,7 +28,7 @@ describe('book analytics', () => {
   })
 
   it('drops trades outside the selected range', () => {
-    const later = buildBookAnalytics(getBookState().trades, {
+    const later = buildBookAnalytics(sampleTrades, {
       equity: 5000,
       bots: [],
       timeRange: '1W',

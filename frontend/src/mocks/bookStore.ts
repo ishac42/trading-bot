@@ -24,8 +24,8 @@ import type {
 } from '@/types'
 
 /**
- * Book screens read this store. The control-plane API is live; leave this
- * true until those screens call it. Saving settings does not place an order.
+ * Book screens read this store until they call the control-plane API.
+ * It starts empty. Saving settings does not place an order.
  */
 export const BOOK_USE_MOCK = true
 
@@ -80,114 +80,19 @@ export const defaultRisk: RiskCaps = {
 }
 
 export const defaultFeeTier: FeeTier = {
-  version: '2026-09-01',
-  refreshed_at: '2026-09-01T14:30:00.000Z',
+  version: '',
+  refreshed_at: '',
 }
 
-const sampleMembers = [
-  { symbol: 'AAPL', price: 228.4, dollar_volume: 8_420_000_000, spread_bps: 1.2 },
-  { symbol: 'MSFT', price: 428.15, dollar_volume: 6_110_000_000, spread_bps: 1.4 },
-  { symbol: 'NVDA', price: 118.62, dollar_volume: 18_900_000_000, spread_bps: 2.1 },
-  { symbol: 'AMZN', price: 186.33, dollar_volume: 5_040_000_000, spread_bps: 1.8 },
-  { symbol: 'META', price: 582.9, dollar_volume: 4_220_000_000, spread_bps: 2.4 },
-  { symbol: 'GOOGL', price: 164.08, dollar_volume: 3_870_000_000, spread_bps: 1.6 },
-  { symbol: 'AVGO', price: 172.44, dollar_volume: 3_150_000_000, spread_bps: 3.2 },
-  { symbol: 'JPM', price: 214.7, dollar_volume: 1_980_000_000, spread_bps: 1.9 },
-]
-
-function snapshotFor(filters: UniverseFilters, members = sampleMembers): UniverseSnapshot {
+function snapshotFor(filters: UniverseFilters, members: UniverseMember[] = []): UniverseSnapshot {
   return {
-    as_of: '2026-09-21T14:35:00.000Z',
+    as_of: '',
     filters: { ...filters },
     members: members.filter(
       (member) => member.price >= filters.min_price && member.spread_bps <= filters.max_spread_bps
     ),
   }
 }
-
-const sampleTrades: Trade[] = [
-  {
-    id: 'trd-1001',
-    bot_id: 'bot-liquid',
-    symbol: 'NVDA',
-    type: 'sell',
-    quantity: 8,
-    price: 119.1,
-    timestamp: '2026-09-21T14:12:00.000Z',
-    status: 'filled',
-    profit_loss: 42.4,
-    profit_loss_pct: 0.46,
-    reason_code: 'TARGET_HIT',
-    shortfall: 0.04,
-    regime: 'trend',
-    session: 'rth',
-  },
-  {
-    id: 'trd-1002',
-    bot_id: 'bot-liquid',
-    symbol: 'AAPL',
-    type: 'buy',
-    quantity: 12,
-    price: 227.85,
-    timestamp: '2026-09-21T13:46:00.000Z',
-    status: 'filled',
-    reason_code: 'SCORE_72',
-    shortfall: 0.02,
-    regime: 'trend',
-    session: 'rth',
-  },
-  {
-    id: 'trd-1003',
-    bot_id: 'bot-tight',
-    symbol: 'AMD',
-    type: 'buy',
-    quantity: 10,
-    price: 164.2,
-    timestamp: '2026-09-21T14:05:00.000Z',
-    status: 'rejected',
-    reason_code: 'NO_TRADE_STALE_DATA',
-    shortfall: 0,
-    regime: 'transition',
-    session: 'rth',
-  },
-  {
-    id: 'trd-1004',
-    bot_id: 'bot-liquid',
-    symbol: 'MSFT',
-    type: 'sell',
-    quantity: 4,
-    price: 410,
-    timestamp: '2026-09-21T15:10:00.000Z',
-    status: 'filled',
-    profit_loss: -6.2,
-    profit_loss_pct: -0.38,
-    reason_code: 'STOP_HIT',
-    shortfall: 0.15,
-    regime: 'range',
-    session: 'rth',
-  },
-]
-
-const vetoLogs: ActivityLogEntry[] = [
-  {
-    id: 'log-veto-cost',
-    timestamp: '2026-09-21T14:20:00.000Z',
-    level: 'info',
-    category: 'risk',
-    message: 'NVDA skipped. Round-trip cost exceeded 3× the gross target.',
-    reason_code: 'NO_TRADE_COST',
-    details: { reason_code: 'NO_TRADE_COST', symbol: 'NVDA', score: 74 },
-  },
-  {
-    id: 'log-veto-stale',
-    timestamp: '2026-09-21T14:05:00.000Z',
-    level: 'warning',
-    category: 'system',
-    message: 'AMD frozen. Quote age exceeded the freshness gate.',
-    reason_code: 'NO_TRADE_STALE_DATA',
-    details: { reason_code: 'NO_TRADE_STALE_DATA', symbol: 'AMD' },
-  },
-]
 
 function withPositionTotals(summary: BookSummary, positions: Position[]): BookSummary {
   const openStop = positions.reduce((sum, item) => sum + (item.open_stop_risk ?? 0), 0)
@@ -201,30 +106,18 @@ function withPositionTotals(summary: BookSummary, positions: Position[]): BookSu
 
 function summaryFor(scenario: BookScenario): BookSummary {
   const base: BookSummary = {
-    equity: 5000,
-    marked_daily_pnl: -18.4,
-    marked_daily_pnl_pct: -0.37,
+    equity: 0,
+    marked_daily_pnl: 0,
+    marked_daily_pnl_pct: 0,
     daily_lock_pct: -2,
     throttle_stage: 'normal',
-    open_stop_risk: 18.75,
-    open_stop_risk_pct: 0.38,
-    position_count: 2,
+    open_stop_risk: 0,
+    open_stop_risk_pct: 0,
+    position_count: 0,
     max_positions: 3,
-    regime: 'trend',
-    data_freshness: { stale: false, age_seconds: 4, feed: 'sip' },
+    regime: null,
+    data_freshness: { stale: true, age_seconds: null, feed: 'sip' },
     kill_switch: { halted: false, locked: false },
-  }
-
-  if (scenario === 'empty') {
-    return {
-      ...base,
-      marked_daily_pnl: 0,
-      marked_daily_pnl_pct: 0,
-      open_stop_risk: 0,
-      open_stop_risk_pct: 0,
-      position_count: 0,
-      regime: null,
-    }
   }
 
   if (scenario === 'stale') {
@@ -237,12 +130,10 @@ function summaryFor(scenario: BookScenario): BookSummary {
   if (scenario === 'locked') {
     return {
       ...base,
+      equity: 5000,
       marked_daily_pnl: -105,
       marked_daily_pnl_pct: -2.1,
       throttle_stage: 'locked',
-      open_stop_risk: 0,
-      open_stop_risk_pct: 0,
-      position_count: 0,
       regime: 'transition',
       kill_switch: { halted: true, locked: true },
     }
@@ -271,45 +162,6 @@ const emptyStats = {
   veto_count: 0,
 }
 
-function seedBots(): BotProfile[] {
-  const liquid: UniverseFilters = { top_n: 75, min_price: 5, max_spread_bps: 12 }
-  const tight: UniverseFilters = { top_n: 50, min_price: 20, max_spread_bps: 10 }
-  return [
-    {
-      id: 'bot-liquid',
-      name: 'Liquid leaders',
-      status: 'running',
-      universe: liquid,
-      snapshot: snapshotFor(liquid),
-      risk: { ...defaultBotRisk },
-      stats: {
-        marked_pnl: 86.2,
-        marked_pnl_pct: 1.72,
-        trade_count: 14,
-        win_rate: 57,
-        expectancy: 0.18,
-        veto_count: 22,
-      },
-    },
-    {
-      id: 'bot-tight',
-      name: 'Tight spreads',
-      status: 'stopped',
-      universe: tight,
-      snapshot: snapshotFor(tight),
-      risk: { ...defaultBotRisk, risk_per_trade_pct: 0.15, max_positions: 2, sleeve_loss_limit_pct: -1 },
-      stats: {
-        marked_pnl: -12.4,
-        marked_pnl_pct: -0.25,
-        trade_count: 6,
-        win_rate: 33,
-        expectancy: -0.04,
-        veto_count: 9,
-      },
-    },
-  ]
-}
-
 export interface BookState {
   scenario: BookScenario
   universe: UniverseFilters
@@ -326,71 +178,22 @@ export interface BookState {
   positions: Position[]
 }
 
-function seedPositions(): Position[] {
-  const opened = '2026-09-22T13:40:00.000Z'
-  return [
-    {
-      id: 'pos-nvda',
-      bot_id: 'bot-liquid',
-      symbol: 'NVDA',
-      quantity: 8,
-      entry_price: 117.4,
-      current_price: 118.62,
-      unrealized_pnl: 9.76,
-      realized_pnl: 0,
-      opened_at: opened,
-      is_open: true,
-      score: 74,
-      veto_code: null,
-      regime: 'trend',
-      expected_cost: 1.8,
-      realized_cost: 0.42,
-      hold_minutes: 48,
-      atr_stop: 115.9,
-      target_price: 120.2,
-      open_stop_risk: 21.76,
-    },
-    {
-      id: 'pos-aapl',
-      bot_id: 'bot-liquid',
-      symbol: 'AAPL',
-      quantity: 12,
-      entry_price: 227.85,
-      current_price: 228.4,
-      unrealized_pnl: 6.6,
-      realized_pnl: 0,
-      opened_at: '2026-09-22T14:05:00.000Z',
-      is_open: true,
-      score: 72,
-      veto_code: null,
-      regime: 'trend',
-      expected_cost: 2.1,
-      realized_cost: 0.55,
-      hold_minutes: 22,
-      atr_stop: 225.4,
-      target_price: 232.1,
-      open_stop_risk: 29.4,
-    },
-  ]
-}
-
 function createState(scenario: BookScenario): BookState {
   const universe = { ...defaultUniverseFilters }
-  const positions = scenario === 'empty' || scenario === 'locked' ? [] : seedPositions()
   return {
     scenario,
     universe,
-    snapshot: snapshotFor(universe, scenario === 'empty' ? [] : sampleMembers),
+    snapshot: snapshotFor(universe),
     session: { ...defaultSession },
     feed: { ...defaultFeed },
     risk: { ...defaultRisk },
     mode: 'paper',
     feeTier: { ...defaultFeeTier },
-    summary: withPositionTotals(summaryFor(scenario), positions),
-    trades: scenario === 'empty' ? [] : sampleTrades,
-    activity: vetoLogs,
-    bots: seedBots(),
-    positions,
+    summary: summaryFor(scenario),
+    trades: [],
+    activity: [],
+    bots: [],
+    positions: [],
   }
 }
 
@@ -417,15 +220,22 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
 
+export function resetBook() {
+  emit(createState('empty'))
+}
+
+export function replaceBookSlice(
+  partial: Partial<Pick<BookState, 'bots' | 'positions' | 'trades' | 'activity' | 'summary'>>
+) {
+  const positions = partial.positions ?? state.positions
+  const summary = withPositionTotals(partial.summary ?? state.summary, positions)
+  emit({ ...state, ...partial, positions, summary })
+}
+
 export function setBookScenario(scenario: BookScenario) {
   const current = state
   const next = createState(scenario)
-  const positions =
-    scenario === 'empty' || scenario === 'locked'
-      ? []
-      : current.positions.length > 0
-        ? current.positions
-        : seedPositions()
+  const positions = scenario === 'empty' || scenario === 'locked' ? [] : current.positions
   emit({
     ...next,
     universe: current.universe,
@@ -435,9 +245,11 @@ export function setBookScenario(scenario: BookScenario) {
     mode: current.mode,
     feeTier: current.feeTier,
     bots: current.bots,
+    trades: scenario === 'empty' ? [] : current.trades,
+    activity: scenario === 'empty' ? [] : current.activity,
     positions,
     summary: withPositionTotals(next.summary, positions),
-    snapshot: snapshotFor(current.universe, scenario === 'empty' ? [] : sampleMembers),
+    snapshot: snapshotFor(current.universe, scenario === 'empty' ? [] : current.snapshot.members),
   })
 }
 
@@ -450,7 +262,7 @@ export function saveUniverseFilters(filters: UniverseFilters): BookActionResult 
   emit({
     ...state,
     universe,
-    snapshot: snapshotFor(universe, state.scenario === 'empty' ? [] : sampleMembers),
+    snapshot: snapshotFor(universe, state.snapshot.members),
   })
   return { ok: true, message: 'Universe filters saved. Membership snapshot refreshed.' }
 }
@@ -563,7 +375,7 @@ export function clampUniverseFilters(filters: UniverseFilters): UniverseFilters 
 
 export function previewUniverse(filters: UniverseFilters): UniverseSnapshot {
   const universe = clampUniverseFilters(filters)
-  return snapshotFor(universe, state.scenario === 'empty' ? [] : sampleMembers)
+  return snapshotFor(universe, state.snapshot.members)
 }
 
 export function clampBotRisk(risk: BotRiskParameters, book: RiskCaps = state.risk): BotRiskParameters {
@@ -586,7 +398,7 @@ function profileFromInput(id: string, input: BotProfileInput, stats: BotProfile[
     name: input.name.trim(),
     status,
     universe,
-    snapshot: snapshotFor(universe, state.scenario === 'empty' ? [] : sampleMembers),
+    snapshot: snapshotFor(universe),
     risk: clampBotRisk(input.risk),
     stats,
   }

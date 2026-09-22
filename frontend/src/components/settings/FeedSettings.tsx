@@ -49,7 +49,9 @@ const FeedSettings = ({ feed, feeTier }: FeedSettingsProps) => {
           Fee tier
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          Version {feeTier.version}. Refreshed {new Date(feeTier.refreshed_at).toLocaleString()}.
+          {feeTier.refreshed_at
+            ? `Version ${feeTier.version}. Refreshed ${new Date(feeTier.refreshed_at).toLocaleString()}.`
+            : 'Fee tier has not been refreshed.'}
         </Typography>
         <Button
           variant="secondary"

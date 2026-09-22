@@ -102,27 +102,3 @@ export function formatCompactCurrency(value: number): string {
   }
   return formatCurrency(value)
 }
-
-/**
- * Format indicator names for display
- */
-export function formatIndicators(indicators: Record<string, any>): string {
-  return Object.keys(indicators).join(', ')
-}
-
-/**
- * Get a trading window string from start/end hours and minutes
- */
-export function formatTradingWindow(
-  startHour: number,
-  startMinute: number,
-  endHour: number,
-  endMinute: number
-): string {
-  const formatTimePart = (hour: number, minute: number) => {
-    const period = hour >= 12 ? 'PM' : 'AM'
-    const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour
-    return `${displayHour}:${minute.toString().padStart(2, '0')} ${period}`
-  }
-  return `${formatTimePart(startHour, startMinute)} - ${formatTimePart(endHour, endMinute)} EST`
-}
