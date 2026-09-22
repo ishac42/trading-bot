@@ -58,6 +58,10 @@ def _trade_to_response(trade: Trade) -> dict:
         "slippage": trade.slippage,
         "client_order_id": trade.client_order_id,
         "reason": trade.reason,
+        "reason_code": trade.reason_code,
+        "shortfall": trade.shortfall,
+        "regime": trade.regime,
+        "session": trade.session,
     }
 
 
@@ -87,10 +91,8 @@ def _apply_date_filter(query, date_range: str, custom_start: str | None, custom_
     return query
 
 
-def _apply_common_filters(query, bot_id: str, symbol: str, trade_type: str):
-    """Apply bot, symbol, and type filters."""
-    if bot_id:
-        query = query.where(Trade.bot_id == bot_id)
+def _apply_common_filters(query, symbol: str, trade_type: str):
+    """Apply symbol and side filters. Bot id is not a product filter."""
     if symbol:
         query = query.where(Trade.symbol == symbol)
     if trade_type and trade_type != "all":
@@ -114,17 +116,16 @@ async def get_trade_stats(
     dateRange: str = Query("all"),
     customStartDate: str | None = Query(None),
     customEndDate: str | None = Query(None),
-    botId: str = Query(""),
     symbol: str = Query(""),
     type: str = Query("all"),
+    side: str = Query(""),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Compute trade statistics matching frontend TradeStats interface."""
-    # Build base query scoped to user's bots
     query = select(Trade).join(Bot).where(Bot.user_id == user.id)
     query = _apply_date_filter(query, dateRange, customStartDate, customEndDate)
-    query = _apply_common_filters(query, botId, symbol, type)
+    query = _apply_common_filters(query, symbol, side or type)
 
     result = await db.execute(query)
     all_trades = list(result.scalars().all())
@@ -236,9 +237,9 @@ async def get_trades(
     dateRange: str = Query("all"),
     customStartDate: str | None = Query(None),
     customEndDate: str | None = Query(None),
-    botId: str = Query(""),
     symbol: str = Query(""),
     type: str = Query("all"),
+    side: str = Query(""),
     sortField: str = Query("timestamp"),
     sortDirection: str = Query("desc"),
     page: int = Query(1, ge=1),
@@ -250,7 +251,7 @@ async def get_trades(
     # Base query scoped to user's bots
     query = select(Trade).join(Bot).where(Bot.user_id == user.id)
     query = _apply_date_filter(query, dateRange, customStartDate, customEndDate)
-    query = _apply_common_filters(query, botId, symbol, type)
+    query = _apply_common_filters(query, symbol, side or type)
 
     # Count total before pagination
     count_query = select(func.count()).select_from(query.subquery())

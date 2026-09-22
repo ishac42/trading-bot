@@ -100,6 +100,22 @@ export const api = {
   // Dashboard Summary
   getSummaryStats: () => apiClient.get('/summary'),
 
+  // Book control plane
+  updateUniverseSettings: (data: { top_n: number; min_price: number; max_spread_bps: number }) =>
+    apiClient.put('/settings/universe', data),
+  getUniverseSettings: () => apiClient.get('/settings/universe'),
+  updateSessionSettings: (data: { rth_enabled: boolean; extended_hours: boolean }) =>
+    apiClient.put('/settings/session', data),
+  updateFeedSettings: (data: { primary: 'sip'; iex_diagnostic: boolean }) =>
+    apiClient.put('/settings/feed', data),
+  updateRiskSettings: (data: Record<string, number>) => apiClient.put('/settings/risk', data),
+  updateModeSettings: (data: { mode: 'paper' | 'shadow' | 'min_size_live' }) =>
+    apiClient.put('/settings/mode', data),
+  refreshFeeTier: () => apiClient.post('/settings/fees/refresh'),
+  flattenBook: () => apiClient.post('/book/flatten', { confirm: true }),
+  lockBook: () => apiClient.post('/book/lock'),
+  unlockBook: () => apiClient.post('/book/unlock'),
+
   // Account
   getAccount: () => apiClient.get('/account'),
   reconcile: (limit?: number) => apiClient.get('/account/reconcile', { params: { limit: limit || 100 } }),

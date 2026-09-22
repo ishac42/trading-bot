@@ -36,15 +36,11 @@ class TestListPositions:
         assert data[0]["id"] == pos["id"]
         assert data[0]["is_open"] is True
 
-    async def test_list_positions_filter_by_bot(self, client, sample_bot_with_position):
-        bot, pos = sample_bot_with_position
-        resp = await client.get(f"/api/positions?botId={bot['id']}")
+    async def test_list_positions_ignores_bot_query(self, client, sample_bot_with_position):
+        resp = await client.get("/api/positions?botId=nonexistent")
         assert resp.status_code == 200
         assert len(resp.json()) == 1
-
-        resp2 = await client.get("/api/positions?botId=nonexistent")
-        assert resp2.status_code == 200
-        assert resp2.json() == []
+        assert resp.json()[0]["score"] is None
 
     async def test_list_positions_filter_by_symbol(self, client, sample_bot_with_position):
         resp = await client.get("/api/positions?symbol=AAPL")

@@ -6,7 +6,7 @@ FastAPI application entry point.
 - Mounts Socket.IO ASGI app at /ws for real-time events
 - Provides /api/health endpoint
 - Startup/shutdown lifecycle events for database connection
-- Starts/stops TradingEngine on application lifecycle
+- Book control plane boots without the bot runner
 - Structured logging via structlog
 - Global exception handlers + request-ID middleware
 """
@@ -21,12 +21,11 @@ from app.config import settings as app_config
 from app.database import engine
 from app.logging_config import configure_logging
 from app.middleware import register_middleware_and_handlers
-from app.routers import account, activity_logs, auth, bots, trades, positions, market_data, settings as settings_router
+from app.routers import account, activity_logs, auth, book, bots, trades, positions, market_data, settings as settings_router
 from app.websocket_manager import socket_app
 from app.alpaca_client import get_alpaca_client, reinitialize_alpaca_client, set_user_alpaca_client
 from app.database import async_session
 from app.models import AppSettings
-from app.trading_engine import trading_engine
 
 logger = structlog.get_logger(__name__)
 
@@ -90,14 +89,11 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("alpaca_not_configured")
 
-    await trading_engine.start()
-    logger.info("trading_engine_started", bots_loaded=len(trading_engine.bots))
+    logger.info("book_control_plane_ready")
 
     yield
 
     logger.info("app_shutting_down")
-    await trading_engine.stop()
-    logger.info("trading_engine_stopped")
     await engine.dispose()
 
 
@@ -126,6 +122,7 @@ app.include_router(bots.router, prefix="/api")
 app.include_router(trades.router, prefix="/api")
 app.include_router(positions.router, prefix="/api")
 app.include_router(market_data.router, prefix="/api")
+app.include_router(book.router, prefix="/api")
 app.include_router(settings_router.router, prefix="/api")
 app.include_router(activity_logs.router, prefix="/api")
 
@@ -141,7 +138,5 @@ async def health_check():
         "environment": app_config.ENVIRONMENT,
         "alpaca_connected": (ac := get_alpaca_client()) is not None,
         "alpaca_paper": ac.is_paper if ac else None,
-        "engine_running": trading_engine._running,
-        "active_bots": len(trading_engine.bots),
-        "market_open": trading_engine.market_is_open,
+        "engine_running": False,
     }

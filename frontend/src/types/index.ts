@@ -346,6 +346,12 @@ export interface AllSettings {
   broker: BrokerSettingsResponse
   notifications: NotificationSettings
   display: DisplaySettings
+  universe: UniverseFilters
+  session: SessionSettings
+  feed: FeedSettings
+  risk: RiskCaps
+  mode: { mode: AccountMode }
+  fees: FeeTier
 }
 
 export interface BrokerTestResult {

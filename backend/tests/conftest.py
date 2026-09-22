@@ -20,8 +20,11 @@ import numpy as np
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.auth import get_current_user
 from app.database import Base, get_db
-from app.models import Bot, Trade, Position, generate_uuid, utcnow
+from app.models import Bot, Trade, Position, User, generate_uuid, utcnow
+
+TEST_USER_ID = "00000000-0000-4000-8000-000000000001"
 
 
 # ---------------------------------------------------------------------------
@@ -136,30 +139,45 @@ async def client(async_engine, mock_trading_engine, mock_ws_manager, mock_alpaca
 
     app.dependency_overrides[get_db] = _override_get_db
 
-    # Patch module-level singletons
-    original_te_bots = bots_mod.trading_engine
-    original_ws_bots = bots_mod.ws_manager
-    original_te_positions = positions_mod.alpaca_client
-    original_ws_positions = positions_mod.ws_manager
-    original_alpaca_market = market_data_mod.alpaca_client
+    async with session_factory() as session:
+        session.add(User(
+            id=TEST_USER_ID,
+            email="book-test@example.com",
+            name="Book Test",
+            google_sub="book-test-sub",
+        ))
+        await session.commit()
 
-    bots_mod.trading_engine = mock_trading_engine
-    bots_mod.ws_manager = mock_ws_manager
+    async def _override_user():
+        async with session_factory() as session:
+            user = await session.get(User, TEST_USER_ID)
+            session.expunge(user)
+            return user
+
+    app.dependency_overrides[get_current_user] = _override_user
+
+    # Routers call get_alpaca_client(); point those lookups at the fake client.
+    original_positions_get = positions_mod.get_alpaca_client
+    original_market_get = market_data_mod.get_alpaca_client
+    original_ws_positions = positions_mod.ws_manager
+
+    def _fake_client(user_id=None):
+        return mock_alpaca_client
+
+    positions_mod.get_alpaca_client = _fake_client
+    market_data_mod.get_alpaca_client = _fake_client
     positions_mod.ws_manager = mock_ws_manager
-    positions_mod.alpaca_client = mock_alpaca_client
-    market_data_mod.alpaca_client = mock_alpaca_client
+    if hasattr(bots_mod, "ws_manager"):
+        bots_mod.ws_manager = mock_ws_manager
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
 
-    # Restore originals
     app.dependency_overrides.clear()
-    bots_mod.trading_engine = original_te_bots
-    bots_mod.ws_manager = original_ws_bots
-    positions_mod.alpaca_client = original_te_positions
+    positions_mod.get_alpaca_client = original_positions_get
+    market_data_mod.get_alpaca_client = original_market_get
     positions_mod.ws_manager = original_ws_positions
-    market_data_mod.alpaca_client = original_alpaca_market
 
 
 # ---------------------------------------------------------------------------
@@ -168,23 +186,16 @@ async def client(async_engine, mock_trading_engine, mock_ws_manager, mock_alpaca
 
 BOT_CREATE_PAYLOAD = {
     "name": "Test Bot Alpha",
-    "capital": 10000.0,
-    "trading_frequency": 60,
-    "symbols": ["AAPL", "MSFT"],
-    "start_hour": 9,
-    "start_minute": 30,
-    "end_hour": 16,
-    "end_minute": 0,
-    "indicators": {
-        "RSI": {"period": 14, "oversold": 30, "overbought": 70},
-        "MACD": {"fast": 12, "slow": 26, "signal": 9},
-    },
-    "risk_management": {
-        "stop_loss": 2.0,
-        "take_profit": 5.0,
-        "max_position_size": 10.0,
-        "max_daily_loss": 5.0,
-        "max_concurrent_positions": 5,
+    "universe": {"top_n": 75, "min_price": 5, "max_spread_bps": 12},
+    "risk": {
+        "risk_per_trade_pct": 0.25,
+        "max_open_stop_risk_pct": 0.75,
+        "max_positions": 3,
+        "single_name_notional_pct": 25,
+        "min_score": 70,
+        "min_target_r": 1.5,
+        "cost_multiple": 3,
+        "sleeve_loss_limit_pct": -1.5,
     },
 }
 

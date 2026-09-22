@@ -10,7 +10,7 @@ These models define the database schema and must align with:
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Float, Index, Integer, String, Text, ForeignKey, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, desc
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -138,6 +138,9 @@ class Bot(Base):
         DateTime(timezone=True), nullable=True, default=None
     )
 
+    # Universe profile (filters, sleeve risk, stats). Null on archive factory rows.
+    profile: Mapped[dict | None] = mapped_column(JSON, nullable=True, default=None)
+
     # Status tracking (required by frontend Bot interface)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     error_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -211,6 +214,10 @@ class Trade(Base):
     reason: Mapped[str | None] = mapped_column(
         String(255), nullable=True, default=None
     )
+    reason_code: Mapped[str | None] = mapped_column(String(64), nullable=True, default=None)
+    shortfall: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
+    regime: Mapped[str | None] = mapped_column(String(32), nullable=True, default=None)
+    session: Mapped[str | None] = mapped_column(String(32), nullable=True, default=None)
 
     # Relationships
     bot: Mapped["Bot"] = relationship(back_populates="trades")
@@ -273,6 +280,15 @@ class Position(Base):
     entry_indicator: Mapped[str | None] = mapped_column(
         String(50), nullable=True, default=None
     )
+    score: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
+    veto_code: Mapped[str | None] = mapped_column(String(64), nullable=True, default=None)
+    regime: Mapped[str | None] = mapped_column(String(32), nullable=True, default=None)
+    expected_cost: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
+    realized_cost: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
+    hold_minutes: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
+    atr_stop: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
+    target_price: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
+    open_stop_risk: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
 
     # Relationships
     bot: Mapped["Bot"] = relationship(back_populates="positions")
@@ -327,3 +343,40 @@ class ActivityLog(Base):
 
     def __repr__(self) -> str:
         return f"<ActivityLog(id={self.id!r}, level={self.level!r}, category={self.category!r})>"
+
+
+class UniverseSnapshot(Base):
+    """Point-in-time universe membership. Append-only."""
+
+    __tablename__ = "universe_snapshots"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    filters: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    members: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+
+    __table_args__ = (
+        Index("ix_universe_snapshots_user_as_of", "user_id", desc("as_of")),
+    )
+
+
+class RiskEvent(Base):
+    """Book risk commands and throttle transitions."""
+
+    __tablename__ = "risk_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    reason_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+    __table_args__ = (
+        Index("ix_risk_events_user_created", "user_id", desc("created_at")),
+    )

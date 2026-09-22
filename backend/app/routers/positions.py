@@ -19,7 +19,7 @@ from app.models import Bot, Position, Trade, User, utcnow, generate_uuid
 from app.schemas import PositionResponseSchema
 from app.websocket_manager import ws_manager
 from app.alpaca_client import get_alpaca_client
-from app.trading_engine import generate_client_order_id, trading_engine
+from app.trading_engine import generate_client_order_id
 
 logger = structlog.get_logger(__name__)
 
@@ -43,6 +43,15 @@ def _position_to_response(pos: Position) -> dict:
         "closed_at": pos.closed_at.isoformat() if pos.closed_at else None,
         "is_open": pos.is_open,
         "entry_indicator": pos.entry_indicator,
+        "score": pos.score,
+        "veto_code": pos.veto_code,
+        "regime": pos.regime,
+        "expected_cost": pos.expected_cost,
+        "realized_cost": pos.realized_cost,
+        "hold_minutes": pos.hold_minutes,
+        "atr_stop": pos.atr_stop,
+        "target_price": pos.target_price,
+        "open_stop_risk": pos.open_stop_risk,
     }
 
 
@@ -58,21 +67,17 @@ SORT_FIELD_MAP = {
 
 @router.get("", response_model=list[PositionResponseSchema])
 async def get_positions(
-    botId: str = Query(""),
     symbol: str = Query(""),
     sortBy: str = Query("opened_at"),
     sortOrder: str = Query("desc"),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """List open positions owned by the current user."""
+    """List open positions owned by the current user. No bot filter."""
     query = select(Position).join(Bot).where(
         Position.is_open.is_(True), Bot.user_id == user.id
     )
 
-    # Filters
-    if botId:
-        query = query.where(Position.bot_id == botId)
     if symbol:
         query = query.where(Position.symbol == symbol)
 
@@ -212,7 +217,6 @@ async def get_position(
 @router.post("/{position_id}/close")
 async def close_position(
     position_id: str,
-    pause_bot: bool = Query(True),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -310,27 +314,4 @@ async def close_position(
         "order_id": sell_trade.order_id,
     })
 
-    # Auto-pause the owning bot so it doesn't immediately re-enter
-    bot_name = None
-    if pause_bot and position.bot_id:
-        try:
-            bot = await db.get(Bot, position.bot_id)
-            if bot and bot.status == "running":
-                bot.status = "paused"
-                bot.updated_at = utcnow()
-                await db.flush()
-                trading_engine.pause_bot(bot.id)
-                bot_name = bot.name
-                await ws_manager.emit_bot_status_changed({
-                    "id": bot.id,
-                    "status": bot.status,
-                    "is_active": bot.is_active,
-                })
-                logger.info(
-                    "Auto-paused bot '%s' after manual close of %s",
-                    bot.name, position.symbol,
-                )
-        except Exception as e:
-            logger.error("Failed to auto-pause bot %s: %s", position.bot_id, e)
-
-    return {"success": True, "bot_paused": bot_name is not None, "bot_name": bot_name}
+    return {"success": True, "bot_paused": False, "bot_name": None}

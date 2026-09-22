@@ -7,19 +7,24 @@ Endpoints:
   GET /api/summary             → dashboard summary statistics
 """
 
-from datetime import datetime, timezone
-
 import structlog
 from fastapi import APIRouter, Depends
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.alpaca_client import get_alpaca_client
 from app.auth import get_current_user
+from app.book_control import (
+    account_equity,
+    book_state,
+    default_risk,
+    marked_daily_pnl,
+    open_stop_risk,
+    read_category,
+)
 from app.database import get_db
 from app.exceptions import ExternalServiceError
-from app.models import Bot, Position, Trade, User
-from app.schemas import MarketStatusSchema, SummaryStatsSchema
+from app.models import User
+from app.schemas import BookSummarySchema, MarketStatusSchema
 
 logger = structlog.get_logger(__name__)
 
@@ -116,94 +121,46 @@ async def get_market_data(symbol: str):
         raise ExternalServiceError("Alpaca", f"Unable to retrieve market data for {symbol.upper()}")
 
 
-@router.get("/summary", response_model=SummaryStatsSchema)
+@router.get("/summary", response_model=BookSummarySchema)
 async def get_summary(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Compute dashboard summary statistics scoped to the current user.
-    Matches frontend SummaryStats interface / mockSummaryStats shape.
-    """
-    # Total P&L from user's trades with profit_loss
-    pnl_result = await db.execute(
-        select(func.coalesce(func.sum(Trade.profit_loss), 0.0))
-        .join(Bot)
-        .where(Trade.profit_loss.isnot(None), Bot.user_id == user.id)
-    )
-    total_pnl = float(pnl_result.scalar())
-
-    # Bot counts by status (user's bots only)
-    bot_counts = await db.execute(
-        select(Bot.status, func.count())
-        .where(Bot.user_id == user.id)
-        .group_by(Bot.status)
-    )
-    status_counts = {row[0]: row[1] for row in bot_counts}
-    active_bots = status_counts.get("running", 0) + status_counts.get("paused", 0)
-    paused_bots = status_counts.get("paused", 0)
-    stopped_bots = status_counts.get("stopped", 0)
-
-    # Total capital (user's bots only)
-    capital_result = await db.execute(
-        select(func.coalesce(func.sum(Bot.capital), 0.0))
-        .where(Bot.user_id == user.id)
-    )
-    total_capital = float(capital_result.scalar())
-    pnl_percentage = (total_pnl / total_capital * 100) if total_capital > 0 else 0.0
-
-    # Open positions count and value (user's positions only)
-    open_pos_result = await db.execute(
-        select(
-            func.count(),
-            func.coalesce(func.sum(Position.current_price * Position.quantity), 0.0),
-        )
-        .join(Bot)
-        .where(Position.is_open.is_(True), Bot.user_id == user.id)
-    )
-    row = open_pos_result.one()
-    open_positions = row[0]
-    positions_value = float(row[1])
-
-    # Trades today (user's trades only)
-    today_start = datetime.now(timezone.utc).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
-    today_count_result = await db.execute(
-        select(func.count())
-        .select_from(Trade)
-        .join(Bot)
-        .where(Trade.timestamp >= today_start, Bot.user_id == user.id)
-    )
-    total_trades_today = today_count_result.scalar() or 0
-
-    # Win rate (from user's closed trades)
-    closed_count_result = await db.execute(
-        select(func.count())
-        .select_from(Trade)
-        .join(Bot)
-        .where(Trade.profit_loss.isnot(None), Bot.user_id == user.id)
-    )
-    total_closed = closed_count_result.scalar() or 0
-
-    winning_count_result = await db.execute(
-        select(func.count())
-        .select_from(Trade)
-        .join(Bot)
-        .where(Trade.profit_loss > 0, Bot.user_id == user.id)
-    )
-    total_winning = winning_count_result.scalar() or 0
-
-    win_rate = (total_winning / total_closed * 100) if total_closed > 0 else 0.0
-
-    return SummaryStatsSchema(
-        total_pnl=round(total_pnl, 2),
-        pnl_percentage=round(pnl_percentage, 2),
-        active_bots=active_bots,
-        paused_bots=paused_bots,
-        stopped_bots=stopped_bots,
-        open_positions=open_positions,
-        positions_value=round(positions_value, 2),
-        total_trades_today=total_trades_today,
-        win_rate=round(win_rate, 1),
+    """Book summary for the dashboard. No bot counts."""
+    state = await book_state(db, user.id)
+    risk = await read_category(db, user.id, "risk", default_risk())
+    equity = await account_equity(user.id)
+    marked = await marked_daily_pnl(db, user.id)
+    stored_pnl = float(state.get("marked_daily_pnl") or 0)
+    if stored_pnl:
+        marked = stored_pnl
+    if equity:
+        marked_pct = marked / equity * 100.0
+    else:
+        marked_pct = float(state.get("marked_daily_pnl_pct") or 0)
+    stop_risk, position_count = await open_stop_risk(db, user.id)
+    stop_pct = (stop_risk / equity * 100.0) if equity else 0.0
+    throttle = state.get("throttle_stage") or "normal"
+    if state.get("locked"):
+        throttle = "locked"
+    return BookSummarySchema(
+        equity=round(equity, 2),
+        marked_daily_pnl=round(marked, 2),
+        marked_daily_pnl_pct=round(marked_pct, 4),
+        daily_lock_pct=float(risk["hard_daily_lock_pct"]),
+        throttle_stage=throttle,
+        open_stop_risk=round(stop_risk, 2),
+        open_stop_risk_pct=round(stop_pct, 4),
+        position_count=position_count,
+        max_positions=int(risk["max_positions"]),
+        regime=state.get("regime"),
+        data_freshness={
+            "stale": True if state.get("data_stale", True) else False,
+            "age_seconds": state.get("data_age_seconds"),
+            "feed": "sip",
+        },
+        kill_switch={
+            "halted": bool(state.get("halted")),
+            "locked": bool(state.get("locked")),
+        },
     )

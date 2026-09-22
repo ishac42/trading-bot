@@ -23,7 +23,10 @@ import type {
   UniverseUpdatedPayload,
 } from '@/types'
 
-/** Book screens read this store until the control-plane API exists. */
+/**
+ * Book screens read this store. The control-plane API is live; leave this
+ * true until those screens call it. Saving settings does not place an order.
+ */
 export const BOOK_USE_MOCK = true
 
 export const RISK_HARD_CAPS = {

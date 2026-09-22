@@ -27,6 +27,23 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
+from app.book_control import (
+    build_universe_snapshot,
+    clamp_stored_bot_risk,
+    default_feed,
+    default_fee,
+    default_mode,
+    default_risk,
+    default_session,
+    default_universe,
+    fee_snapshot_from_broker,
+    latest_snapshot,
+    read_category,
+    refresh_bot_snapshots,
+    snapshot_payload,
+    store_snapshot,
+    write_category,
+)
 from app.config import settings as app_settings
 from app.database import get_db
 from app.exceptions import ExternalServiceError
@@ -38,8 +55,16 @@ from app.schemas import (
     BrokerTestResponse,
     DataStatsResponse,
     DisplaySettingsSchema,
+    FeedSettingsSchema,
+    FeeTierSchema,
+    ModeSettingsSchema,
     NotificationSettingsSchema,
+    RiskCapsSchema,
+    SessionSettingsSchema,
+    UniverseFiltersSchema,
+    UniverseSettingsResponse,
 )
+from app.websocket_manager import ws_manager
 
 logger = structlog.get_logger(__name__)
 
@@ -113,12 +138,109 @@ async def get_all_settings(
     broker_data = broker_row.settings if broker_row else {}
     notif_data = notif_row.settings if notif_row else {}
     display_data = display_row.settings if display_row else {}
+    universe = await read_category(db, user.id, "universe", default_universe())
+    session = await read_category(db, user.id, "session", default_session())
+    feed = await read_category(db, user.id, "feed", default_feed())
+    risk = await read_category(db, user.id, "risk", default_risk())
+    mode = await read_category(db, user.id, "mode", default_mode())
+    fees = await read_category(db, user.id, "fees", default_fee())
 
     return AllSettingsResponse(
         broker=_build_broker_response(broker_data),
         notifications=NotificationSettingsSchema(**notif_data) if notif_data else NotificationSettingsSchema(),
         display=DisplaySettingsSchema(**display_data) if display_data else DisplaySettingsSchema(),
+        universe=UniverseFiltersSchema(**universe),
+        session=SessionSettingsSchema(**session),
+        feed=FeedSettingsSchema(**feed),
+        risk=RiskCapsSchema(**risk),
+        mode=ModeSettingsSchema(**mode),
+        fees=FeeTierSchema(**fees),
     )
+
+
+@router.get("/universe", response_model=UniverseSettingsResponse)
+async def get_universe(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    filters = await read_category(db, user.id, "universe", default_universe())
+    row = await latest_snapshot(db, user.id)
+    return UniverseSettingsResponse(
+        filters=UniverseFiltersSchema(**filters),
+        snapshot=snapshot_payload(row, filters),
+    )
+
+
+@router.put("/universe", response_model=UniverseSettingsResponse)
+async def update_universe(
+    body: UniverseFiltersSchema,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    filters = body.model_dump()
+    await write_category(db, user.id, "universe", filters)
+    members = await build_universe_snapshot(user.id, filters)
+    row = await store_snapshot(db, user.id, filters, members)
+    payload = snapshot_payload(row, filters)
+    await refresh_bot_snapshots(db, user.id, payload)
+    await ws_manager.emit_universe_updated({
+        "as_of": payload["as_of"],
+        "members": payload["members"],
+        "filters": filters,
+    })
+    return UniverseSettingsResponse(filters=body, snapshot=payload)
+
+
+@router.put("/session", response_model=SessionSettingsSchema)
+async def update_session(
+    body: SessionSettingsSchema,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await write_category(db, user.id, "session", body.model_dump())
+    return body
+
+
+@router.put("/feed", response_model=FeedSettingsSchema)
+async def update_feed(
+    body: FeedSettingsSchema,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await write_category(db, user.id, "feed", body.model_dump())
+    return body
+
+
+@router.put("/risk", response_model=RiskCapsSchema)
+async def update_risk(
+    body: RiskCapsSchema,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    data = body.model_dump()
+    await write_category(db, user.id, "risk", data)
+    await clamp_stored_bot_risk(db, user.id, data)
+    return body
+
+
+@router.put("/mode", response_model=ModeSettingsSchema)
+async def update_mode(
+    body: ModeSettingsSchema,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await write_category(db, user.id, "mode", body.model_dump())
+    return body
+
+
+@router.post("/fees/refresh", response_model=FeeTierSchema)
+async def refresh_fees(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    snapshot = await fee_snapshot_from_broker(user.id)
+    await write_category(db, user.id, "fees", snapshot)
+    return FeeTierSchema(**snapshot)
 
 
 # ---------------------------------------------------------------------------

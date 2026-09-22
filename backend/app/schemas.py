@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 # =============================================================================
@@ -166,6 +166,10 @@ class TradeResponseSchema(BaseModel):
     slippage: float | None = None
     client_order_id: str | None = None
     reason: str | None = None
+    reason_code: str | None = None
+    shortfall: float | None = None
+    regime: str | None = None
+    session: str | None = None
 
 
 class PaginationSchema(BaseModel):
@@ -214,6 +218,15 @@ class PositionResponseSchema(BaseModel):
     closed_at: str | None = None
     is_open: bool
     entry_indicator: str | None = None
+    score: float | None = None
+    veto_code: str | None = None
+    regime: str | None = None
+    expected_cost: float | None = None
+    realized_cost: float | None = None
+    hold_minutes: float | None = None
+    atr_stop: float | None = None
+    target_price: float | None = None
+    open_stop_risk: float | None = None
 
 
 # =============================================================================
@@ -432,6 +445,12 @@ class AllSettingsResponse(BaseModel):
     broker: BrokerSettingsResponse
     notifications: NotificationSettingsSchema
     display: DisplaySettingsSchema
+    universe: "UniverseFiltersSchema"
+    session: "SessionSettingsSchema"
+    feed: "FeedSettingsSchema"
+    risk: "RiskCapsSchema"
+    mode: "ModeSettingsSchema"
+    fees: "FeeTierSchema"
 
 
 class BrokerTestResponse(BaseModel):
@@ -473,3 +492,158 @@ class ActivityLogListResponseSchema(BaseModel):
     """Paginated activity log response."""
     logs: list[ActivityLogResponseSchema]
     pagination: PaginationSchema
+
+
+# =============================================================================
+# Book control-plane schemas
+# =============================================================================
+
+class UniverseFiltersSchema(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    top_n: int = Field(ge=50, le=100)
+    min_price: float = Field(ge=5)
+    max_spread_bps: float = Field(ge=10, le=15)
+
+
+class UniverseMemberSchema(BaseModel):
+    symbol: str
+    price: float
+    dollar_volume: float
+    spread_bps: float
+
+
+class UniverseSnapshotSchema(BaseModel):
+    as_of: str | None = None
+    filters: UniverseFiltersSchema
+    members: list[UniverseMemberSchema] = Field(default_factory=list)
+
+
+class UniverseSettingsResponse(BaseModel):
+    filters: UniverseFiltersSchema
+    snapshot: UniverseSnapshotSchema
+
+
+class SessionSettingsSchema(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rth_enabled: bool = True
+    extended_hours: bool = False
+
+    @model_validator(mode="after")
+    def equity_session_is_rth(self) -> "SessionSettingsSchema":
+        if self.extended_hours:
+            raise ValueError("Extended hours is not the equity session")
+        if not self.rth_enabled:
+            raise ValueError("Regular trading hours stay on")
+        return self
+
+
+class FeedSettingsSchema(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    primary: Literal["sip"] = "sip"
+    iex_diagnostic: bool = False
+
+
+class RiskCapsSchema(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    risk_per_trade_pct: float = Field(gt=0, le=0.25)
+    max_open_stop_risk_pct: float = Field(gt=0, le=0.75)
+    soft_throttle_pct: float = Field(ge=-1, le=-0.1)
+    stop_new_risk_pct: float = Field(ge=-1.5, le=-0.2)
+    hard_daily_lock_pct: float = Field(ge=-2, le=-0.3)
+    max_positions: int = Field(ge=1, le=3)
+    single_name_notional_pct: float = Field(ge=1, le=25)
+    min_score: int = Field(ge=70, le=100)
+    min_target_r: float = Field(ge=1.5)
+    cost_multiple: float = Field(ge=3)
+
+    @model_validator(mode="after")
+    def ladder_order(self) -> "RiskCapsSchema":
+        if not (self.soft_throttle_pct > self.stop_new_risk_pct > self.hard_daily_lock_pct):
+            raise ValueError("Throttle ladder must tighten from soft throttle to stop-new to the daily lock")
+        if self.risk_per_trade_pct > self.max_open_stop_risk_pct:
+            raise ValueError("Risk per trade cannot exceed max open stop-risk")
+        return self
+
+
+class ModeSettingsSchema(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["paper", "shadow", "min_size_live"]
+
+
+class FeeTierSchema(BaseModel):
+    version: str = ""
+    refreshed_at: str = ""
+    source: str = ""
+    account_id: str | None = None
+
+
+class BotRiskSchema(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    risk_per_trade_pct: float = Field(gt=0, le=0.25)
+    max_open_stop_risk_pct: float = Field(gt=0, le=0.75)
+    max_positions: int = Field(ge=1, le=3)
+    single_name_notional_pct: float = Field(ge=1, le=25)
+    min_score: int = Field(ge=70, le=100)
+    min_target_r: float = Field(ge=1.5)
+    cost_multiple: float = Field(ge=3)
+    sleeve_loss_limit_pct: float = Field(ge=-2, le=-0.1)
+
+
+class BotStatsSchema(BaseModel):
+    marked_pnl: float = 0
+    marked_pnl_pct: float = 0
+    trade_count: int = 0
+    win_rate: float = 0
+    expectancy: float = 0
+    veto_count: int = 0
+
+
+class BotProfileWriteSchema(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=255)
+    universe: UniverseFiltersSchema
+    risk: BotRiskSchema
+
+
+class BotProfileResponseSchema(BaseModel):
+    id: str
+    name: str
+    status: Literal["running", "stopped"]
+    universe: UniverseFiltersSchema
+    snapshot: UniverseSnapshotSchema
+    risk: BotRiskSchema
+    stats: BotStatsSchema
+
+
+class ConfirmBody(BaseModel):
+    confirm: bool
+
+
+class BookSummarySchema(BaseModel):
+    equity: float
+    marked_daily_pnl: float
+    marked_daily_pnl_pct: float
+    daily_lock_pct: float
+    throttle_stage: Literal["normal", "half", "stop_new", "locked"]
+    open_stop_risk: float
+    open_stop_risk_pct: float
+    position_count: int
+    max_positions: int
+    regime: str | None = None
+    data_freshness: dict[str, Any]
+    kill_switch: dict[str, bool]
+
+
+class RiskEventSchema(BaseModel):
+    id: str
+    kind: str
+    reason_code: str
+    payload: dict[str, Any]
+    created_at: str

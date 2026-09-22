@@ -31,6 +31,7 @@ class TestHealthCheck:
         assert data["status"] == "healthy"
         assert "environment" in data
         assert "alpaca_connected" in data
+        assert "active_bots" not in data
 
 
 # ---------------------------------------------------------------------------
@@ -88,9 +89,12 @@ class TestSummary:
         resp = await client.get("/api/summary")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["total_pnl"] == 0
-        assert data["active_bots"] == 0
-        assert data["open_positions"] == 0
+        assert "active_bots" not in data
+        assert data["position_count"] == 0
+        assert data["equity"] == 0
+        assert data["throttle_stage"] == "normal"
+        assert data["data_freshness"]["stale"] is True
+        assert data["kill_switch"]["locked"] is False
 
     async def test_summary_with_data(self, client, async_engine, sample_bot):
         session_factory = async_sessionmaker(
@@ -116,6 +120,7 @@ class TestSummary:
         resp = await client.get("/api/summary")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["total_pnl"] == 50.0
-        assert data["open_positions"] == 1
-        assert data["positions_value"] == 1550.0  # 5 * 310.0
+        assert "active_bots" not in data
+        assert data["position_count"] == 1
+        assert data["marked_daily_pnl"] == 100.0
+        assert data["open_stop_risk"] == 0

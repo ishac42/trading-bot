@@ -38,15 +38,11 @@ class TestListTrades:
         assert len(data["trades"]) == 1
         assert data["trades"][0]["id"] == trade["id"]
 
-    async def test_list_trades_filter_by_bot(self, client, sample_bot_with_trade):
-        bot, trade = sample_bot_with_trade
-        resp = await client.get(f"/api/trades?botId={bot['id']}")
+    async def test_list_trades_ignores_bot_query(self, client, sample_bot_with_trade):
+        resp = await client.get("/api/trades?botId=nonexistent")
         assert resp.status_code == 200
         assert resp.json()["pagination"]["totalItems"] == 1
-
-        resp2 = await client.get("/api/trades?botId=nonexistent")
-        assert resp2.status_code == 200
-        assert resp2.json()["pagination"]["totalItems"] == 0
+        assert resp.json()["trades"][0]["reason_code"] is None
 
     async def test_list_trades_filter_by_symbol(self, client, sample_bot_with_trade):
         resp = await client.get("/api/trades?symbol=AAPL")

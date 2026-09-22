@@ -83,6 +83,22 @@ class WebSocketManager:
         """Broadcast a market status change (open/close) to all clients."""
         await sio.emit("market_status_changed", status)
 
+    async def emit_risk_event(self, data: dict) -> None:
+        """Broadcast a book risk command or throttle change."""
+        await sio.emit("risk_event", data)
+
+    async def emit_regime_changed(self, data: dict) -> None:
+        """Broadcast a regime label. The runtime publishes this in a later cut."""
+        await sio.emit("regime_changed", data)
+
+    async def emit_data_health(self, data: dict) -> None:
+        """Broadcast quote freshness. Unknown freshness is stale."""
+        await sio.emit("data_health", data)
+
+    async def emit_universe_updated(self, data: dict) -> None:
+        """Broadcast a newly stored universe snapshot."""
+        await sio.emit("universe_updated", data)
+
     async def emit_reconciliation_alert(self, data: dict) -> None:
         """Broadcast a reconciliation discrepancy alert to all clients."""
         await sio.emit("reconciliation_alert", data)

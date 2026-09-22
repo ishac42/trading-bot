@@ -84,6 +84,13 @@ class BadRequestError(AppException):
     error_code = "BAD_REQUEST"
 
 
+class GoneError(AppException):
+    """Retired route (410)."""
+
+    status_code = 410
+    error_code = "GONE"
+
+
 class ExternalServiceError(AppException):
     """Upstream service (Alpaca, etc.) failed (502)."""
 
