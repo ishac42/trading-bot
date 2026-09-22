@@ -140,6 +140,22 @@ const sampleTrades: Trade[] = [
     regime: 'transition',
     session: 'rth',
   },
+  {
+    id: 'trd-1004',
+    bot_id: 'bot-liquid',
+    symbol: 'MSFT',
+    type: 'sell',
+    quantity: 4,
+    price: 410,
+    timestamp: '2026-09-21T15:10:00.000Z',
+    status: 'filled',
+    profit_loss: -6.2,
+    profit_loss_pct: -0.38,
+    reason_code: 'STOP_HIT',
+    shortfall: 0.15,
+    regime: 'range',
+    session: 'rth',
+  },
 ]
 
 const vetoLogs: ActivityLogEntry[] = [

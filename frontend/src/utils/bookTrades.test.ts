@@ -24,13 +24,13 @@ describe('book trades', () => {
     const trades = getBookState().trades
     expect(filterBookTrades(trades, { ...all, dateRange: 'today' }, now)).toHaveLength(0)
     const week = filterBookTrades(trades, { ...all, dateRange: 'week' }, now)
-    expect(week).toHaveLength(3)
+    expect(week).toHaveLength(4)
 
     const stats = summarizeBookTrades(week)
     expect(stats.pnlByBot).toEqual([])
-    expect(stats.pnlByRegime?.map((row) => row.regime).sort()).toEqual(['transition', 'trend'])
-    expect(stats.pnlBySession).toEqual([{ session: 'rth', trades: 3, pnl: 42.4 }])
-    expect(stats.pnlBySymbol.map((row) => row.symbol)).toEqual(['NVDA'])
+    expect(stats.pnlByRegime?.map((row) => row.regime).sort()).toEqual(['range', 'transition', 'trend'])
+    expect(stats.pnlBySession).toEqual([{ session: 'rth', trades: 4, pnl: 36.2 }])
+    expect(stats.pnlBySymbol.map((row) => row.symbol)).toEqual(['NVDA', 'MSFT'])
   })
 
   it('includes reason, shortfall, regime, and session in the CSV', () => {
