@@ -37,9 +37,8 @@ export const useMarketStatus = () => {
   }, [data])
 
   useEffect(() => {
-    const unsubscribe = subscribe('market_status_changed', (newStatus: MarketStatus) => {
-      setMarketStatus(newStatus)
-      // Invalidate query to refetch
+    const unsubscribe = subscribe('market_status_changed', (payload: unknown) => {
+      setMarketStatus(payload as MarketStatus)
       refetch()
     })
 

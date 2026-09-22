@@ -18,7 +18,8 @@ export const useRealtimePositions = () => {
 
   // Handle incoming position update events
   const handlePositionUpdated = useCallback(
-    (updatedPosition: Partial<Position> & { id: string }) => {
+    (payload: unknown) => {
+      const updatedPosition = payload as Partial<Position> & { id: string }
       // Update position in all position query caches
       queryClient.setQueriesData<Position[]>(
         { queryKey: ['positions'] },
@@ -47,7 +48,8 @@ export const useRealtimePositions = () => {
 
   // Handle price updates (symbol-level updates that affect multiple positions)
   const handlePriceUpdate = useCallback(
-    (data: { symbol: string; price: number }) => {
+    (payload: unknown) => {
+      const data = payload as { symbol: string; price: number }
       queryClient.setQueriesData<Position[]>(
         { queryKey: ['positions'] },
         (old) => {
