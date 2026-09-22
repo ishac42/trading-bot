@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.alpaca_client import get_alpaca_client
@@ -326,17 +326,17 @@ async def marked_daily_pnl(db: AsyncSession, user_id: str) -> float:
     today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     realized_result = await db.execute(
         select(func.coalesce(func.sum(Trade.profit_loss), 0.0))
-        .join(Bot, Trade.bot_id == Bot.id)
+        .outerjoin(Bot, Trade.bot_id == Bot.id)
         .where(
-            Bot.user_id == user_id,
+            or_(Bot.user_id == user_id, Trade.user_id == user_id),
             Trade.profit_loss.isnot(None),
             Trade.timestamp >= today,
         )
     )
     unrealized_result = await db.execute(
         select(func.coalesce(func.sum(Position.unrealized_pnl), 0.0))
-        .join(Bot, Position.bot_id == Bot.id)
-        .where(Bot.user_id == user_id, Position.is_open.is_(True))
+        .outerjoin(Bot, Position.bot_id == Bot.id)
+        .where(or_(Bot.user_id == user_id, Position.user_id == user_id), Position.is_open.is_(True))
     )
     realized = float(realized_result.scalar() or 0)
     unrealized = float(unrealized_result.scalar() or 0)
@@ -351,8 +351,8 @@ async def open_stop_risk(db: AsyncSession, user_id: str) -> tuple[float, int]:
             func.count(),
             func.coalesce(func.sum(Position.open_stop_risk), 0.0),
         )
-        .join(Bot, Position.bot_id == Bot.id)
-        .where(Bot.user_id == user_id, Position.is_open.is_(True))
+        .outerjoin(Bot, Position.bot_id == Bot.id)
+        .where(or_(Bot.user_id == user_id, Position.user_id == user_id), Position.is_open.is_(True))
     )
     count, risk = result.one()
     return float(risk or 0), int(count or 0)
@@ -401,8 +401,8 @@ async def flatten_broker(user_id: str) -> dict[str, int]:
 async def close_db_positions(db: AsyncSession, user_id: str) -> int:
     result = await db.execute(
         select(Position)
-        .join(Bot, Position.bot_id == Bot.id)
-        .where(Bot.user_id == user_id, Position.is_open.is_(True))
+        .outerjoin(Bot, Position.bot_id == Bot.id)
+        .where(or_(Bot.user_id == user_id, Position.user_id == user_id), Position.is_open.is_(True))
     )
     rows = list(result.scalars())
     now = utcnow()

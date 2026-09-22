@@ -146,7 +146,7 @@ class TradeResponseSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    bot_id: str
+    bot_id: str | None = None
     symbol: str
     type: Literal["buy", "sell"]
     quantity: int
@@ -205,7 +205,7 @@ class PositionResponseSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    bot_id: str
+    bot_id: str | None = None
     symbol: str
     quantity: int
     entry_price: float

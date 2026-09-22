@@ -26,6 +26,7 @@ from app.websocket_manager import socket_app
 from app.alpaca_client import get_alpaca_client, reinitialize_alpaca_client, set_user_alpaca_client
 from app.database import async_session
 from app.models import AppSettings
+from app.trading_runtime import trading_runtime
 
 logger = structlog.get_logger(__name__)
 
@@ -90,10 +91,12 @@ async def lifespan(app: FastAPI):
         logger.warning("alpaca_not_configured")
 
     logger.info("book_control_plane_ready")
+    await trading_runtime.start()
 
     yield
 
     logger.info("app_shutting_down")
+    await trading_runtime.stop()
     await engine.dispose()
 
 
@@ -139,4 +142,5 @@ async def health_check():
         "alpaca_connected": (ac := get_alpaca_client()) is not None,
         "alpaca_paper": ac.is_paper if ac else None,
         "engine_running": False,
+        "runtime_state": trading_runtime.state.value,
     }

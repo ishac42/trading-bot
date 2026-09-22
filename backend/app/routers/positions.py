@@ -9,7 +9,7 @@ Endpoints:
 
 import structlog
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
@@ -19,7 +19,7 @@ from app.models import Bot, Position, Trade, User, utcnow, generate_uuid
 from app.schemas import PositionResponseSchema
 from app.websocket_manager import ws_manager
 from app.alpaca_client import get_alpaca_client
-from app.trading_engine import generate_client_order_id
+from app.execution.ids import book_client_order_id
 
 logger = structlog.get_logger(__name__)
 
@@ -74,8 +74,9 @@ async def get_positions(
     db: AsyncSession = Depends(get_db),
 ):
     """List open positions owned by the current user. No bot filter."""
-    query = select(Position).join(Bot).where(
-        Position.is_open.is_(True), Bot.user_id == user.id
+    query = select(Position).outerjoin(Bot, Position.bot_id == Bot.id).where(
+        Position.is_open.is_(True),
+        or_(Bot.user_id == user.id, Position.user_id == user.id),
     )
 
     if symbol:
@@ -117,8 +118,8 @@ async def get_unmanaged_positions(
     # Sum our DB open positions per symbol (scoped to user's bots)
     db_result = await db.execute(
         select(Position.symbol, func.sum(Position.quantity))
-        .join(Bot)
-        .where(Position.is_open.is_(True), Bot.user_id == user.id)
+        .outerjoin(Bot, Position.bot_id == Bot.id)
+        .where(Position.is_open.is_(True), or_(Bot.user_id == user.id, Position.user_id == user.id))
         .group_by(Position.symbol)
     )
     db_qty_map: dict[str, int] = {row[0]: int(row[1]) for row in db_result}
@@ -206,7 +207,10 @@ async def get_position(
 ):
     """Get a single position by ID."""
     result = await db.execute(
-        select(Position).join(Bot).where(Position.id == position_id, Bot.user_id == user.id)
+        select(Position).outerjoin(Bot, Position.bot_id == Bot.id).where(
+            Position.id == position_id,
+            or_(Bot.user_id == user.id, Position.user_id == user.id),
+        )
     )
     position = result.scalar_one_or_none()
     if not position:
@@ -229,7 +233,10 @@ async def close_position(
     5. Emit WebSocket events
     """
     result = await db.execute(
-        select(Position).join(Bot).where(Position.id == position_id, Bot.user_id == user.id)
+        select(Position).outerjoin(Bot, Position.bot_id == Bot.id).where(
+            Position.id == position_id,
+            or_(Bot.user_id == user.id, Position.user_id == user.id),
+        )
     )
     position = result.scalar_one_or_none()
     if not position:
@@ -240,7 +247,7 @@ async def close_position(
     now = utcnow()
     order_id = None
     sell_price = position.current_price
-    coid = generate_client_order_id(position.bot_id)
+    coid = book_client_order_id(position.symbol, "close")
 
     client = get_alpaca_client(user_id=user.id)
     if client:

@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 
 import structlog
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
@@ -123,7 +123,9 @@ async def get_trade_stats(
     db: AsyncSession = Depends(get_db),
 ):
     """Compute trade statistics matching frontend TradeStats interface."""
-    query = select(Trade).join(Bot).where(Bot.user_id == user.id)
+    query = select(Trade).outerjoin(Bot, Trade.bot_id == Bot.id).where(
+        or_(Bot.user_id == user.id, Trade.user_id == user.id)
+    )
     query = _apply_date_filter(query, dateRange, customStartDate, customEndDate)
     query = _apply_common_filters(query, symbol, side or type)
 
@@ -249,7 +251,9 @@ async def get_trades(
 ):
     """List trades with filtering, sorting, and pagination."""
     # Base query scoped to user's bots
-    query = select(Trade).join(Bot).where(Bot.user_id == user.id)
+    query = select(Trade).outerjoin(Bot, Trade.bot_id == Bot.id).where(
+        or_(Bot.user_id == user.id, Trade.user_id == user.id)
+    )
     query = _apply_date_filter(query, dateRange, customStartDate, customEndDate)
     query = _apply_common_filters(query, symbol, side or type)
 
@@ -292,7 +296,10 @@ async def get_trade(
 ):
     """Get a single trade by ID."""
     result = await db.execute(
-        select(Trade).join(Bot).where(Trade.id == trade_id, Bot.user_id == user.id)
+        select(Trade).outerjoin(Bot, Trade.bot_id == Bot.id).where(
+            Trade.id == trade_id,
+            or_(Bot.user_id == user.id, Trade.user_id == user.id),
+        )
     )
     trade = result.scalar_one_or_none()
     if not trade:

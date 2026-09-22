@@ -174,8 +174,11 @@ class Trade(Base):
     id: Mapped[str] = mapped_column(
         String(36), primary_key=True, default=generate_uuid
     )
-    bot_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("bots.id", ondelete="CASCADE"), nullable=False
+    bot_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("bots.id", ondelete="CASCADE"), nullable=True, default=None
+    )
+    user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=True, default=None
     )
     symbol: Mapped[str] = mapped_column(String(20), nullable=False)
     type: Mapped[str] = mapped_column(
@@ -245,11 +248,18 @@ class Position(Base):
     id: Mapped[str] = mapped_column(
         String(36), primary_key=True, default=generate_uuid
     )
-    bot_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("bots.id", ondelete="CASCADE"), nullable=False
+    bot_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("bots.id", ondelete="CASCADE"), nullable=True, default=None
+    )
+    user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=True, default=None
     )
     symbol: Mapped[str] = mapped_column(String(20), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    side: Mapped[str | None] = mapped_column(String(10), nullable=True, default=None)
+    trail_atr: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
+    max_hold_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+    cluster_id: Mapped[str | None] = mapped_column(String(64), nullable=True, default=None)
     entry_price: Mapped[float] = mapped_column(Float, nullable=False)
     current_price: Mapped[float] = mapped_column(Float, nullable=False)
 
@@ -380,3 +390,83 @@ class RiskEvent(Base):
     __table_args__ = (
         Index("ix_risk_events_user_created", "user_id", desc("created_at")),
     )
+
+
+class StrategyVersion(Base):
+    """Locked parameter set. One row is live. This is not a user-built bot."""
+
+    __tablename__ = "strategy_versions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    params: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    params_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    promotion_state: Mapped[str] = mapped_column(String(32), nullable=False, default="research")
+    is_live: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+
+class FeatureSnapshot(Base):
+    __tablename__ = "feature_snapshots"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    symbol: Mapped[str] = mapped_column(String(20), nullable=False)
+    values: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    frozen: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+
+class SignalRecord(Base):
+    __tablename__ = "signals"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    symbol: Mapped[str] = mapped_column(String(20), nullable=False)
+    regime: Mapped[str | None] = mapped_column(String(32), nullable=True, default=None)
+    engine: Mapped[str | None] = mapped_column(String(32), nullable=True, default=None)
+    score: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
+    components: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    veto_code: Mapped[str | None] = mapped_column(String(64), nullable=True, default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+
+class BookOrder(Base):
+    __tablename__ = "orders"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    client_order_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    symbol: Mapped[str] = mapped_column(String(20), nullable=False)
+    side: Mapped[str] = mapped_column(String(10), nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    order_type: Mapped[str] = mapped_column(String(20), nullable=False, default="limit")
+    limit_price: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
+    intended_price: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("client_order_id", name="uq_orders_client_order_id"),
+    )
+
+
+class Fill(Base):
+    __tablename__ = "fills"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    order_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("orders.id", ondelete="CASCADE"), nullable=False
+    )
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    price: Mapped[float] = mapped_column(Float, nullable=False)
+    fee: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    slippage: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    shortfall: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    filled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)

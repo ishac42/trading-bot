@@ -504,6 +504,29 @@ class AlpacaClient:
         return self._is_paper
 
 
+# Equity first book. Shorts, crypto, and extended hours stay off.
+CAPABILITIES = {
+    "equity_long": True,
+    "equity_short": False,
+    "crypto": False,
+    "market": True,
+    "limit": True,
+    "stop": True,
+    "bracket": False,
+    "oco": False,
+    "extended_hours": False,
+}
+
+
+class CapabilityError(Exception):
+    """The requested venue capability is not enabled for this book."""
+
+
+def require_capability(name: str) -> None:
+    if not CAPABILITIES.get(name):
+        raise CapabilityError(f"{name} is not enabled")
+
+
 # ---------------------------------------------------------------------------
 # Client management — default client + per-user client registry
 # ---------------------------------------------------------------------------
