@@ -11,6 +11,38 @@ class TestBotProfiles:
         assert resp.status_code == 200
         assert resp.json() == []
 
+    async def test_update_persists_parameters(self, client, sample_bot):
+        updated = await client.put(f"/api/bots/{sample_bot['id']}", json={
+            "name": "bot1",
+            "universe": {"top_n": 50, "min_price": 8, "max_spread_bps": 10},
+            "risk": {
+                "risk_per_trade_pct": 0.1,
+                "max_open_stop_risk_pct": 0.4,
+                "max_positions": 2,
+                "single_name_notional_pct": 15,
+                "min_score": 80,
+                "min_target_r": 2,
+                "cost_multiple": 4,
+                "sleeve_loss_limit_pct": -1,
+            },
+        })
+        assert updated.status_code == 200
+        body = updated.json()
+        assert body["name"] == "bot1"
+        assert body["universe"]["top_n"] == 50
+        assert body["risk"]["min_score"] == 80
+        assert body["risk"]["sleeve_loss_limit_pct"] == -1
+        assert body["status"] == "stopped"
+
+        listed = await client.get("/api/bots")
+        assert listed.status_code == 200
+        saved = listed.json()[0]
+        assert saved["id"] == sample_bot["id"]
+        assert saved["name"] == "bot1"
+        assert saved["universe"]["min_price"] == 8
+        assert saved["risk"]["risk_per_trade_pct"] == 0.1
+        assert saved["stats"]["trade_count"] == 0
+
     async def test_create_profile(self, client):
         resp = await client.post("/api/bots", json=BOT_CREATE_PAYLOAD)
         assert resp.status_code == 201

@@ -13,6 +13,10 @@ import {
   saveUniverseFilters,
   setBookScenario,
   applyBookSocketEvent,
+  applyServerBot,
+  applyServerBots,
+  botListEpochNow,
+  bumpBotListEpoch,
   closeBookPosition,
   startBotProfile,
   unlockBook,
@@ -98,6 +102,23 @@ describe('book store', () => {
     expect(getBookState().summary.open_stop_risk).toBeLessThan(riskBefore)
     expect(getBookState().summary.position_count).toBe(1)
     expect(getBookState().bots.find((bot) => bot.id === before.bot_id)?.status).toBe('running')
+  })
+
+  it('keeps a saved bot when an older list response arrives', () => {
+    const saved = {
+      id: 'bot-1',
+      name: 'bot1',
+      status: 'stopped' as const,
+      universe: { top_n: 75, min_price: 5, max_spread_bps: 12 },
+      snapshot: { as_of: '', filters: { top_n: 75, min_price: 5, max_spread_bps: 12 }, members: [] },
+      risk: { ...defaultBotRisk },
+      stats: { marked_pnl: 0, marked_pnl_pct: 0, trade_count: 0, win_rate: 0, expectancy: 0, veto_count: 0 },
+    }
+    const staleEpoch = botListEpochNow()
+    bumpBotListEpoch()
+    applyServerBot(saved)
+    applyServerBots([], staleEpoch)
+    expect(getBookState().bots.map((bot) => bot.name)).toEqual(['bot1'])
   })
 
   it('refuses unlock while marked daily loss is at the lock', () => {

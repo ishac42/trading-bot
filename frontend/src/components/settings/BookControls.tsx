@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Alert, Box, Snackbar, Stack, Typography } from '@mui/material'
 import { Button, Modal } from '@/components/common'
-import { engageKillSwitch, flattenBook, lockBook, unlockBook, type BookActionResult } from '@/mocks/bookStore'
+import { engageKillSwitch, type BookActionResult } from '@/mocks/bookStore'
+import { persistBookCommand } from '@/services/bookControl'
 import type { KillSwitchState } from '@/types'
 
 interface BookControlsProps {
@@ -30,16 +31,18 @@ const BookControls = ({ killSwitch, compact = false }: BookControlsProps) => {
   const [pending, setPending] = useState<PendingAction>(null)
   const [notice, setNotice] = useState<BookActionResult | null>(null)
 
-  const run = (action: PendingAction) => {
+  const run = async (action: PendingAction) => {
     if (!action) return
     const result =
-      action === 'flatten' ? flattenBook() : action === 'lock' ? lockBook() : engageKillSwitch()
+      action === 'kill'
+        ? engageKillSwitch()
+        : await persistBookCommand(action === 'flatten' ? 'flatten' : 'lock')
     setNotice(result)
     setPending(null)
   }
 
-  const handleUnlock = () => {
-    setNotice(unlockBook())
+  const handleUnlock = async () => {
+    setNotice(await persistBookCommand('unlock'))
   }
 
   return (

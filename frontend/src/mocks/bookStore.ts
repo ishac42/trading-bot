@@ -175,6 +175,7 @@ export interface BookState {
   trades: Trade[]
   activity: ActivityLogEntry[]
   bots: BotProfile[]
+  botsLoaded: boolean
   positions: Position[]
 }
 
@@ -193,12 +194,47 @@ function createState(scenario: BookScenario): BookState {
     trades: [],
     activity: [],
     bots: [],
+    botsLoaded: false,
     positions: [],
   }
 }
 
 let state: BookState = createState('normal')
+let botListEpoch = 0
 const listeners = new Set<() => void>()
+
+export function botListEpochNow(): number {
+  return botListEpoch
+}
+
+export function bumpBotListEpoch(): number {
+  botListEpoch += 1
+  return botListEpoch
+}
+
+export function applyServerBots(bots: BotProfile[], epoch: number) {
+  if (epoch !== botListEpoch) return
+  emit({ ...state, bots, botsLoaded: true })
+}
+
+export function markBotsLoaded(epoch: number) {
+  if (epoch !== botListEpoch) return
+  emit({ ...state, botsLoaded: true })
+}
+
+export function applyServerBot(bot: BotProfile) {
+  bumpBotListEpoch()
+  const bots = state.bots.some((item) => item.id === bot.id)
+    ? state.bots.map((item) => (item.id === bot.id ? bot : item))
+    : [...state.bots, bot]
+  emit({ ...state, bots, botsLoaded: true })
+}
+
+export function applyServerBotRemoval(id: string, name: string): BookActionResult {
+  bumpBotListEpoch()
+  emit({ ...state, bots: state.bots.filter((bot) => bot.id !== id), botsLoaded: true })
+  return { ok: true, message: `${name} removed. Its past fills stay on the book.` }
+}
 
 function emit(next: BookState) {
   state = next
@@ -221,6 +257,7 @@ function clamp(value: number, min: number, max: number) {
 }
 
 export function resetBook() {
+  botListEpoch = 0
   emit(createState('empty'))
 }
 
@@ -245,6 +282,7 @@ export function setBookScenario(scenario: BookScenario) {
     mode: current.mode,
     feeTier: current.feeTier,
     bots: current.bots,
+    botsLoaded: current.botsLoaded,
     trades: scenario === 'empty' ? [] : current.trades,
     activity: scenario === 'empty' ? [] : current.activity,
     positions,
@@ -310,6 +348,34 @@ export function saveRisk(risk: RiskCaps): BookActionResult {
     bots: state.bots.map((bot) => ({ ...bot, risk: clampBotRisk(bot.risk, next) })),
   })
   return { ok: true, message: 'Book risk caps saved. Bot parameters were clamped to the new ceiling.' }
+}
+
+export function applyPersistedBook(partial: {
+  universe?: UniverseFilters
+  session?: SessionSettings
+  feed?: FeedSettings
+  risk?: RiskCaps
+  mode?: AccountMode
+  feeTier?: FeeTier
+  summary?: BookSummary
+}) {
+  const risk = partial.risk ?? state.risk
+  const summary = partial.summary
+    ? { ...partial.summary, max_positions: risk.max_positions, daily_lock_pct: risk.hard_daily_lock_pct }
+    : { ...state.summary, max_positions: risk.max_positions, daily_lock_pct: risk.hard_daily_lock_pct }
+  emit({
+    ...state,
+    universe: partial.universe ?? state.universe,
+    session: partial.session ?? state.session,
+    feed: partial.feed ? { primary: 'sip', iex_diagnostic: Boolean(partial.feed.iex_diagnostic) } : state.feed,
+    risk,
+    mode: partial.mode ?? state.mode,
+    feeTier: partial.feeTier ?? state.feeTier,
+    summary,
+    bots: partial.risk
+      ? state.bots.map((bot) => ({ ...bot, risk: clampBotRisk(bot.risk, risk) }))
+      : state.bots,
+  })
 }
 
 export function saveMode(mode: AccountMode): BookActionResult {

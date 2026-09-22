@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Alert, Box, Snackbar, Typography } from '@mui/material'
 import { Button, Card, EmptyState, PnLDisplay, StatusBadge } from '@/components/common'
-import { stopBotProfile, type BookActionResult } from '@/mocks/bookStore'
+import type { BookActionResult } from '@/mocks/bookStore'
+import { setBotProfileRunning } from '@/services/botProfiles'
 import type { BotProfile } from '@/types'
 
 interface RunningBotsProps {
@@ -54,7 +55,10 @@ const RunningBots = ({ bots }: RunningBotsProps) => {
                 </Box>
               </Box>
               <Box sx={{ display: 'flex', gap: 1, mt: 1.5 }}>
-                <Button variant="secondary" onClick={() => setNotice(stopBotProfile(bot.id))}>
+                <Button
+                  variant="secondary"
+                  onClick={async () => setNotice(await setBotProfileRunning(bot.id, false))}
+                >
                   Stop
                 </Button>
                 <Button variant="text" onClick={() => navigate(`/bots/${bot.id}/edit`)}>

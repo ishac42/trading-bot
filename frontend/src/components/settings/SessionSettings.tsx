@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Alert, Box, FormControlLabel, Snackbar, Switch, Typography } from '@mui/material'
 import { Button } from '@/components/common'
-import { getBookState, saveSession, type BookActionResult } from '@/mocks/bookStore'
+import { getBookState, type BookActionResult } from '@/mocks/bookStore'
+import { persistSession } from '@/services/bookControl'
 import type { SessionSettings as SessionSettingsModel } from '@/types'
 
 interface SessionSettingsProps {
@@ -46,9 +47,10 @@ const SessionSettings = ({ session }: SessionSettingsProps) => {
       <Button
         variant="primary"
         sx={{ mt: 2 }}
-        onClick={() => {
-          setNotice(saveSession(draft))
-          setDraft(getBookState().session)
+        onClick={async () => {
+          const result = await persistSession(draft)
+          setNotice(result)
+          if (result.ok) setDraft(getBookState().session)
         }}
       >
         Save

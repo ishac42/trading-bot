@@ -8,17 +8,24 @@ import { useRealtimeDashboard } from '@/hooks/useRealtimeDashboard'
 import {
   clampBotRisk,
   clampUniverseFilters,
-  createBotProfile,
   defaultBotRisk,
   previewUniverse,
   UNIVERSE_LIMITS,
-  updateBotProfile,
   type BookActionResult,
 } from '@/mocks/bookStore'
+import { saveBotProfile } from '@/services/botProfiles'
 import type { BotRiskParameters, UniverseFilters } from '@/types'
 
 const BotProfileEditor = () => {
   const { botId } = useParams()
+  const book = useBook()
+  if (botId && !book.botsLoaded) {
+    return (
+      <Box>
+        <Typography variant="h5">Loading bot…</Typography>
+      </Box>
+    )
+  }
   return <BotProfileEditorForm key={botId ?? 'create'} botId={botId} />
 }
 
@@ -33,6 +40,7 @@ const BotProfileEditorForm = ({ botId }: { botId?: string }) => {
   const [universe, setUniverse] = useState<UniverseFilters>(existing?.universe ?? clampUniverseFilters(book.universe))
   const [risk, setRisk] = useState<BotRiskParameters>(existing?.risk ?? clampBotRisk(defaultBotRisk, book.risk))
   const [notice, setNotice] = useState<BookActionResult | null>(null)
+  const [saving, setSaving] = useState(false)
 
   const filtersMatch =
     existing != null &&
@@ -42,9 +50,10 @@ const BotProfileEditorForm = ({ botId }: { botId?: string }) => {
   const snapshot = filtersMatch ? existing.snapshot : previewUniverse(universe)
   const ceiling = book.risk
 
-  const save = () => {
-    const input = { name, universe, risk }
-    const result = existing ? updateBotProfile(existing.id, input) : createBotProfile(input)
+  const save = async () => {
+    setSaving(true)
+    const result = await saveBotProfile({ name, universe, risk }, existing?.id)
+    setSaving(false)
     setNotice(result)
     if (result.ok) {
       window.setTimeout(() => navigate('/bots'), 400)
@@ -170,8 +179,8 @@ const BotProfileEditorForm = ({ botId }: { botId?: string }) => {
       </Stack>
 
       <Box sx={{ display: 'flex', gap: 1, mt: 3 }}>
-        <Button variant="primary" onClick={save}>
-          Save
+        <Button variant="primary" onClick={save} disabled={saving}>
+          {saving ? 'Saving…' : 'Save'}
         </Button>
         <Button variant="text" onClick={() => navigate('/bots')}>
           Cancel

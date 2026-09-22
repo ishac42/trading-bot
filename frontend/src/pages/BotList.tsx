@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { Alert, Box, Snackbar, TextField, Typography } from '@mui/material'
 import { Button, Card, EmptyState, PnLDisplay, StatusBadge } from '@/components/common'
 import { useBook } from '@/hooks/useBook'
-import { deleteBotProfile, startBotProfile, stopBotProfile, type BookActionResult } from '@/mocks/bookStore'
+import type { BookActionResult } from '@/mocks/bookStore'
+import { removeBotProfile, setBotProfileRunning } from '@/services/botProfiles'
 import type { BotProfile } from '@/types'
 
 const BotList = () => {
@@ -19,7 +20,7 @@ const BotList = () => {
     return bots.filter((bot) => bot.name.toLowerCase().includes(needle))
   }, [bots, query])
 
-  const run = (result: BookActionResult) => setNotice(result)
+  const run = async (result: Promise<BookActionResult>) => setNotice(await result)
 
   return (
     <Box>
@@ -76,11 +77,11 @@ const BotList = () => {
               </Box>
               <Box sx={{ display: 'flex', gap: 1, mt: 2, flexWrap: 'wrap' }}>
                 {bot.status === 'running' ? (
-                  <Button variant="secondary" onClick={() => run(stopBotProfile(bot.id))}>
+                  <Button variant="secondary" onClick={() => run(setBotProfileRunning(bot.id, false))}>
                     Stop
                   </Button>
                 ) : (
-                  <Button variant="primary" onClick={() => run(startBotProfile(bot.id))}>
+                  <Button variant="primary" onClick={() => run(setBotProfileRunning(bot.id, true))}>
                     Start
                   </Button>
                 )}
@@ -108,7 +109,7 @@ const BotList = () => {
                 <Button
                   variant="danger"
                   onClick={() => {
-                    run(deleteBotProfile(pendingDelete.id))
+                    run(removeBotProfile(pendingDelete.id, pendingDelete.name))
                     setPendingDelete(null)
                   }}
                 >

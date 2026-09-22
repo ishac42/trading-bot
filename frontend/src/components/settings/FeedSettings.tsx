@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Alert, Box, Chip, FormControlLabel, Snackbar, Switch, Typography } from '@mui/material'
 import { Button } from '@/components/common'
-import { getBookState, refreshFeeTier, saveFeed, type BookActionResult } from '@/mocks/bookStore'
+import { getBookState, type BookActionResult } from '@/mocks/bookStore'
+import { persistFeeRefresh, persistFeed } from '@/services/bookControl'
 import type { FeeTier, FeedSettings as FeedSettingsModel } from '@/types'
 
 interface FeedSettingsProps {
@@ -36,9 +37,10 @@ const FeedSettings = ({ feed, feeTier }: FeedSettingsProps) => {
       </Typography>
       <Button
         variant="primary"
-        onClick={() => {
-          setNotice(saveFeed({ primary: 'sip', iex_diagnostic: diagnostic }))
-          setDiagnostic(getBookState().feed.iex_diagnostic)
+        onClick={async () => {
+          const result = await persistFeed({ primary: 'sip', iex_diagnostic: diagnostic })
+          setNotice(result)
+          if (result.ok) setDiagnostic(getBookState().feed.iex_diagnostic)
         }}
       >
         Save
@@ -55,7 +57,7 @@ const FeedSettings = ({ feed, feeTier }: FeedSettingsProps) => {
         </Typography>
         <Button
           variant="secondary"
-          onClick={() => setNotice(refreshFeeTier())}
+          onClick={async () => setNotice(await persistFeeRefresh())}
         >
           Refresh fee tier
         </Button>

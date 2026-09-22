@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Alert, Box, FormControlLabel, Radio, RadioGroup, Snackbar, Typography } from '@mui/material'
 import { Button } from '@/components/common'
-import { getBookState, saveMode, type BookActionResult } from '@/mocks/bookStore'
+import { getBookState, type BookActionResult } from '@/mocks/bookStore'
+import { persistMode } from '@/services/bookControl'
 import type { AccountMode } from '@/types'
 
 interface AccountModeSettingsProps {
@@ -51,9 +52,10 @@ const AccountModeSettings = ({ mode }: AccountModeSettingsProps) => {
       <Button
         variant="primary"
         sx={{ mt: 1 }}
-        onClick={() => {
-          setNotice(saveMode(draft))
-          setDraft(getBookState().mode)
+        onClick={async () => {
+          const result = await persistMode(draft)
+          setNotice(result)
+          if (result.ok) setDraft(getBookState().mode)
         }}
       >
         Save

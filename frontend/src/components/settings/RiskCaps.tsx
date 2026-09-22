@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { Alert, Box, Snackbar, Stack, TextField, Tooltip, Typography } from '@mui/material'
 import { Button } from '@/components/common'
 import BookControls from '@/components/settings/BookControls'
-import { getBookState, RISK_HARD_CAPS, saveRisk, type BookActionResult } from '@/mocks/bookStore'
+import { getBookState, RISK_HARD_CAPS, type BookActionResult } from '@/mocks/bookStore'
+import { persistRisk } from '@/services/bookControl'
 import type { KillSwitchState, RiskCaps as RiskCapsModel } from '@/types'
 
 interface RiskCapsProps {
@@ -58,9 +59,10 @@ const RiskCaps = ({ risk, killSwitch }: RiskCapsProps) => {
         ))}
         <Button
           variant="primary"
-          onClick={() => {
-            setNotice(saveRisk(draft))
-            setDraft(getBookState().risk)
+          onClick={async () => {
+            const result = await persistRisk(draft)
+            setNotice(result)
+            if (result.ok) setDraft(getBookState().risk)
           }}
           sx={{ alignSelf: 'flex-start' }}
         >
