@@ -10,7 +10,6 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  useMediaQuery,
   useTheme,
 } from '@mui/material'
 import {
@@ -99,14 +98,48 @@ const AnalysisSkeleton: React.FC = () => (
  * TradeAnalysis Component
  *
  * Displays trade statistics overview, cumulative P&L chart,
- * performance by symbol, and performance by bot.
+ * performance by symbol, and splits by regime and session.
  */
+const SplitTable: React.FC<{
+  label: string
+  rows: { name: string; trades: number; pnl: number }[]
+}> = ({ label, rows }) => {
+  if (rows.length === 0) return null
+  return (
+    <TableContainer>
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell sx={{ fontWeight: 600 }}>{label}</TableCell>
+            <TableCell sx={{ fontWeight: 600 }} align="right">Trades</TableCell>
+            <TableCell sx={{ fontWeight: 600 }} align="right">P&L</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {rows.map((row) => (
+            <TableRow key={row.name}>
+              <TableCell>
+                <Typography variant="body2">{row.name}</Typography>
+              </TableCell>
+              <TableCell align="right">
+                <Typography variant="body2">{row.trades}</Typography>
+              </TableCell>
+              <TableCell align="right">
+                <PnLDisplay amount={row.pnl} showSign size="small" bold />
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  )
+}
+
 export const TradeAnalysis: React.FC<TradeAnalysisProps> = ({
   stats,
   isLoading,
 }) => {
   const theme = useTheme()
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
   if (isLoading) return <AnalysisSkeleton />
   if (!stats) return null
@@ -262,78 +295,31 @@ export const TradeAnalysis: React.FC<TradeAnalysisProps> = ({
           </Card>
         </Grid>
 
-        {/* Performance by Bot */}
         <Grid size={{ xs: 12, md: 6 }}>
-          <Card title="Performance by Bot">
-            {stats.pnlByBot.length === 0 ? (
+          <Card title="By regime and session">
+            {(stats.pnlByRegime?.length ?? 0) === 0 && (stats.pnlBySession?.length ?? 0) === 0 ? (
               <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
-                No closed trades yet
+                Regime and session splits appear when the book records them.
               </Typography>
             ) : (
-              <TableContainer>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: 600 }}>Bot</TableCell>
-                      <TableCell sx={{ fontWeight: 600 }} align="right">
-                        Trades
-                      </TableCell>
-                      <TableCell sx={{ fontWeight: 600 }} align="right">
-                        Win Rate
-                      </TableCell>
-                      <TableCell sx={{ fontWeight: 600 }} align="right">
-                        P&L
-                      </TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {stats.pnlByBot
-                      .sort((a, b) => b.pnl - a.pnl)
-                      .map((row) => (
-                        <TableRow key={row.botId}>
-                          <TableCell>
-                            <Typography
-                              variant="body2"
-                              sx={{
-                                maxWidth: isMobile ? 100 : 160,
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                              }}
-                            >
-                              {row.botName}
-                            </Typography>
-                          </TableCell>
-                          <TableCell align="right">
-                            <Typography variant="body2">
-                              {row.trades}
-                            </Typography>
-                          </TableCell>
-                          <TableCell align="right">
-                            <Typography
-                              variant="body2"
-                              color={
-                                row.winRate >= 50
-                                  ? 'success.main'
-                                  : 'error.main'
-                              }
-                            >
-                              {row.winRate}%
-                            </Typography>
-                          </TableCell>
-                          <TableCell align="right">
-                            <PnLDisplay
-                              amount={row.pnl}
-                              showSign
-                              size="small"
-                              bold
-                            />
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <SplitTable
+                  label="Regime"
+                  rows={(stats.pnlByRegime ?? []).map((row) => ({
+                    name: row.regime,
+                    trades: row.trades,
+                    pnl: row.pnl,
+                  }))}
+                />
+                <SplitTable
+                  label="Session"
+                  rows={(stats.pnlBySession ?? []).map((row) => ({
+                    name: row.session,
+                    trades: row.trades,
+                    pnl: row.pnl,
+                  }))}
+                />
+              </Box>
             )}
           </Card>
         </Grid>

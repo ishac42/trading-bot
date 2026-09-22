@@ -98,7 +98,7 @@ function snapshotFor(filters: UniverseFilters, members = sampleMembers): Univers
 const sampleTrades: Trade[] = [
   {
     id: 'trd-1001',
-    bot_id: '',
+    bot_id: 'bot-liquid',
     symbol: 'NVDA',
     type: 'sell',
     quantity: 8,
@@ -114,7 +114,7 @@ const sampleTrades: Trade[] = [
   },
   {
     id: 'trd-1002',
-    bot_id: '',
+    bot_id: 'bot-liquid',
     symbol: 'AAPL',
     type: 'buy',
     quantity: 12,
@@ -124,6 +124,20 @@ const sampleTrades: Trade[] = [
     reason_code: 'SCORE_72',
     shortfall: 0.02,
     regime: 'trend',
+    session: 'rth',
+  },
+  {
+    id: 'trd-1003',
+    bot_id: 'bot-tight',
+    symbol: 'AMD',
+    type: 'buy',
+    quantity: 10,
+    price: 164.2,
+    timestamp: '2026-09-21T14:05:00.000Z',
+    status: 'rejected',
+    reason_code: 'NO_TRADE_STALE_DATA',
+    shortfall: 0,
+    regime: 'transition',
     session: 'rth',
   },
 ]

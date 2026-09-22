@@ -217,6 +217,8 @@ export interface TradeStats {
   pnlByDate: { date: string; pnl: number; cumulativePnl: number }[]
   pnlBySymbol: { symbol: string; pnl: number; trades: number; winRate: number }[]
   pnlByBot: { botId: string; botName: string; pnl: number; trades: number; winRate: number }[]
+  pnlByRegime?: { regime: string; trades: number; pnl: number }[]
+  pnlBySession?: { session: string; trades: number; pnl: number }[]
 }
 
 // =====================

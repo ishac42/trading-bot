@@ -8,7 +8,7 @@ import {
 import { Modal, PnLDisplay } from '@/components/common'
 import type { Trade } from '@/types'
 import { formatCurrency } from '@/utils/formatters'
-import { useBots } from '@/hooks/useBots'
+import { useBook } from '@/hooks/useBook'
 
 interface TradeDetailModalProps {
   trade: Trade | null
@@ -50,9 +50,11 @@ export const TradeDetailModal: React.FC<TradeDetailModalProps> = ({
   open,
   onClose,
 }) => {
-  const { data: bots } = useBots()
-  const getBotName = (botId: string) =>
-    bots?.find((b) => b.id === botId)?.name || 'Unknown Bot'
+  const { bots } = useBook()
+  const getBotName = (botId: string) => {
+    if (!botId) return 'Book'
+    return bots.find((bot) => bot.id === botId)?.name || 'Unknown bot'
+  }
 
   if (!trade) return null
 
@@ -135,13 +137,23 @@ export const TradeDetailModal: React.FC<TradeDetailModalProps> = ({
           />
         </DetailRow>
 
-        {trade.reason && (
-          <DetailRow label="Reason">
-            <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
-              {trade.reason}
-            </Typography>
-          </DetailRow>
-        )}
+        <DetailRow label="Reason">
+          <Typography variant="body2">{trade.reason_code || trade.reason || '—'}</Typography>
+        </DetailRow>
+
+        <DetailRow label="Shortfall">
+          <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+            {trade.shortfall != null ? formatCurrency(trade.shortfall) : '—'}
+          </Typography>
+        </DetailRow>
+
+        <DetailRow label="Regime">
+          <Typography variant="body2">{trade.regime ?? '—'}</Typography>
+        </DetailRow>
+
+        <DetailRow label="Session">
+          <Typography variant="body2">{trade.session ?? '—'}</Typography>
+        </DetailRow>
 
         {trade.order_id && (
           <DetailRow label="Order ID">
@@ -190,34 +202,6 @@ export const TradeDetailModal: React.FC<TradeDetailModalProps> = ({
           </DetailRow>
         )}
 
-        {/* Indicator Snapshot */}
-        {trade.indicators_snapshot &&
-          Object.keys(trade.indicators_snapshot).length > 0 && (
-            <>
-              <Divider sx={{ my: 1 }} />
-              <Typography
-                variant="body2"
-                fontWeight={600}
-                sx={{ mb: 0.5 }}
-              >
-                Indicator Values at Trade Time
-              </Typography>
-              {Object.entries(trade.indicators_snapshot).map(
-                ([key, value]) => (
-                  <DetailRow key={key} label={key}>
-                    <Typography
-                      variant="body2"
-                      sx={{ fontFamily: 'monospace' }}
-                    >
-                      {typeof value === 'number'
-                        ? value.toFixed(2)
-                        : JSON.stringify(value)}
-                    </Typography>
-                  </DetailRow>
-                )
-              )}
-            </>
-          )}
       </Box>
     </Modal>
   )

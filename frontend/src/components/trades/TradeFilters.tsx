@@ -21,11 +21,12 @@ import {
 } from '@mui/icons-material'
 import type { SelectChangeEvent } from '@mui/material'
 import type { TradeFilters as TradeFiltersType, DateRangePreset, TradeTypeFilter } from '@/types'
-import { mockBots } from '@/mocks/dashboardData'
 
 interface TradeFiltersProps {
   filters: TradeFiltersType
   onFiltersChange: (filters: TradeFiltersType) => void
+  bots: { id: string; name: string }[]
+  symbols: string[]
 }
 
 const DATE_RANGE_OPTIONS: { value: DateRangePreset; label: string }[] = [
@@ -35,15 +36,6 @@ const DATE_RANGE_OPTIONS: { value: DateRangePreset; label: string }[] = [
   { value: 'all', label: 'All Time' },
   { value: 'custom', label: 'Custom' },
 ]
-
-/**
- * Get unique symbols from mock bots
- */
-function getUniqueSymbols(): string[] {
-  const symbols = new Set<string>()
-  mockBots.forEach((bot) => bot.symbols.forEach((s) => symbols.add(s)))
-  return Array.from(symbols).sort()
-}
 
 /**
  * Count active filters
@@ -74,12 +66,13 @@ const defaultFilters: TradeFiltersType = {
 export const TradeFilters: React.FC<TradeFiltersProps> = ({
   filters,
   onFiltersChange,
+  bots,
+  symbols,
 }) => {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const [showFilters, setShowFilters] = React.useState(!isMobile)
 
-  const symbols = React.useMemo(() => getUniqueSymbols(), [])
   const activeFilterCount = countActiveFilters(filters)
 
   const handleDateRangeChange = (
@@ -230,8 +223,8 @@ export const TradeFilters: React.FC<TradeFiltersProps> = ({
               onChange={handleBotChange}
               label="Bot"
             >
-              <MenuItem value="">All Bots</MenuItem>
-              {mockBots.map((bot) => (
+              <MenuItem value="">All bots</MenuItem>
+              {bots.map((bot) => (
                 <MenuItem key={bot.id} value={bot.id}>
                   {bot.name}
                 </MenuItem>

@@ -1,37 +1,15 @@
-import React, { useState, useCallback } from 'react'
-import {
-  Box,
-  Typography,
-  Tabs,
-  Tab,
-  Tooltip,
-  IconButton,
-  Alert,
-  Collapse,
-} from '@mui/material'
-import {
-  Download as DownloadIcon,
-  Analytics as AnalyticsIcon,
-  TableChart as TableChartIcon,
-} from '@mui/icons-material'
+import React, { useCallback, useMemo, useState } from 'react'
+import { Box, Typography, Tabs, Tab, Tooltip, IconButton, Alert, Collapse } from '@mui/material'
+import DownloadIcon from '@mui/icons-material/Download'
+import AnalyticsIcon from '@mui/icons-material/Analytics'
+import TableChartIcon from '@mui/icons-material/TableChart'
 import { useSearchParams } from 'react-router-dom'
 import { TradeFilters, TradeTable, TradeDetailModal, TradeAnalysis } from '@/components/trades'
-import { useTrades } from '@/hooks/useTrades'
-import { useTradeStats } from '@/hooks/useTradeStats'
-import { useBots } from '@/hooks/useBots'
+import { useBook } from '@/hooks/useBook'
 import { exportTradesToCsv } from '@/utils/csvExport'
-import { mockTrades } from '@/mocks/dashboardData'
-import type {
-  Trade,
-  TradeFilters as TradeFiltersType,
-  TradeSort,
-  DateRangePreset,
-  TradeTypeFilter,
-} from '@/types'
+import { filterBookTrades, paginateTrades, sortBookTrades, summarizeBookTrades } from '@/utils/bookTrades'
+import type { Trade, TradeFilters as TradeFiltersType, TradeSort, DateRangePreset, TradeTypeFilter } from '@/types'
 
-/**
- * Parse URL search params into TradeFilters
- */
 function parseFiltersFromParams(params: URLSearchParams): TradeFiltersType {
   return {
     dateRange: (params.get('dateRange') as DateRangePreset) || 'all',
@@ -43,9 +21,6 @@ function parseFiltersFromParams(params: URLSearchParams): TradeFiltersType {
   }
 }
 
-/**
- * Serialize TradeFilters to URL search params
- */
 function filtersToParams(filters: TradeFiltersType): URLSearchParams {
   const params = new URLSearchParams()
   if (filters.dateRange !== 'all') params.set('dateRange', filters.dateRange)
@@ -57,105 +32,52 @@ function filtersToParams(filters: TradeFiltersType): URLSearchParams {
   return params
 }
 
-/**
- * Trades Page
- *
- * Full trade history page with:
- * - Filters (date range, bot, symbol, type)
- * - Sortable & paginated trade table
- * - Trade detail modal on row click
- * - Trade analysis with stats and P&L chart
- * - CSV export
- * - URL query params for shareable filter state
- */
 const Trades: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams()
+  const { trades, bots } = useBook()
+  const filters = useMemo(() => parseFiltersFromParams(searchParams), [searchParams])
+  const [sort, setSort] = useState<TradeSort>({ field: 'timestamp', direction: 'desc' })
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+  const [activeTab, setActiveTab] = useState(0)
+  const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null)
+  const [showExportSuccess, setShowExportSuccess] = useState(false)
 
-  // Filters from URL
-  const filters = parseFiltersFromParams(searchParams)
   const setFilters = useCallback(
     (newFilters: TradeFiltersType) => {
       setSearchParams(filtersToParams(newFilters), { replace: true })
+      setPage(1)
     },
     [setSearchParams]
   )
 
-  // Sorting state
-  const [sort, setSort] = useState<TradeSort>({
-    field: 'timestamp',
-    direction: 'desc',
-  })
-
-  // Pagination state
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(10)
-
-  // Tab state (table vs analysis)
-  const [activeTab, setActiveTab] = useState(0)
-
-  // Trade detail modal
-  const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null)
-
-  // Export feedback
-  const [showExportSuccess, setShowExportSuccess] = useState(false)
-
-  const { data: bots } = useBots()
-
-  // Data fetching
-  const {
-    data: tradesData,
-    isLoading: isLoadingTrades,
-    error: tradesError,
-  } = useTrades({ filters, sort, page, pageSize })
-
-  const {
-    data: tradeStats,
-    isLoading: isLoadingStats,
-  } = useTradeStats(filters)
-
-  // Reset page when filters change
-  React.useEffect(() => {
-    setPage(1)
-  }, [filters.dateRange, filters.botId, filters.symbol, filters.type])
-
-  const handleRowClick = useCallback((trade: Trade) => {
-    setSelectedTrade(trade)
-  }, [])
-
-  const handleCloseDetail = useCallback(() => {
-    setSelectedTrade(null)
-  }, [])
+  const filtered = useMemo(
+    () => sortBookTrades(filterBookTrades(trades, filters), sort),
+    [trades, filters, sort]
+  )
+  const pageView = useMemo(
+    () => paginateTrades(filtered, page, pageSize),
+    [filtered, page, pageSize]
+  )
+  const stats = useMemo(() => summarizeBookTrades(filtered), [filtered])
+  const availableBots = useMemo(() => bots.map((bot) => ({ id: bot.id, name: bot.name })), [bots])
+  const availableSymbols = useMemo(
+    () => [...new Set(trades.map((trade) => trade.symbol))].sort(),
+    [trades]
+  )
 
   const handleExportCsv = useCallback(() => {
-    // For export, we use all filtered trades (not paginated)
-    // In a real app, this would be a separate API call
-    // For mock, we replicate the filter logic
-    const allTrades = mockTrades
-      .filter((trade) => {
-        if (filters.botId && trade.bot_id !== filters.botId) return false
-        if (filters.symbol && trade.symbol !== filters.symbol) return false
-        if (filters.type !== 'all' && trade.type !== filters.type) return false
-        return true
-      })
-      .sort(
-        (a, b) =>
-          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-      )
-
-    const getBotName = (botId: string) =>
-      bots?.find((b) => b.id === botId)?.name || 'Unknown Bot'
-    exportTradesToCsv(allTrades, getBotName)
+    const getBotName = (botId: string) => {
+      if (!botId) return 'Book'
+      return bots.find((bot) => bot.id === botId)?.name || 'Unknown bot'
+    }
+    exportTradesToCsv(filtered, getBotName)
     setShowExportSuccess(true)
     setTimeout(() => setShowExportSuccess(false), 3000)
-  }, [filters])
-
-  const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
-    setActiveTab(newValue)
-  }
+  }, [filtered, bots])
 
   return (
     <Box>
-      {/* Header */}
       <Box
         sx={{
           display: 'flex',
@@ -177,40 +99,31 @@ const Trades: React.FC = () => {
           Trade History
         </Typography>
         <Tooltip title="Export filtered trades as CSV">
-          <IconButton onClick={handleExportCsv} color="primary">
+          <IconButton onClick={handleExportCsv} color="primary" aria-label="Export filtered trades as CSV">
             <DownloadIcon />
           </IconButton>
         </Tooltip>
       </Box>
 
-      {/* Export Success */}
       <Collapse in={showExportSuccess}>
-        <Alert
-          severity="success"
-          onClose={() => setShowExportSuccess(false)}
-          sx={{ mb: 2 }}
-        >
+        <Alert severity="success" onClose={() => setShowExportSuccess(false)} sx={{ mb: 2 }}>
           Trades exported successfully!
         </Alert>
       </Collapse>
 
-      {/* Error */}
-      {tradesError && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          Failed to load trades. Please try again.
-        </Alert>
-      )}
-
-      {/* Filters */}
       <Box sx={{ mb: 2 }}>
-        <TradeFilters filters={filters} onFiltersChange={setFilters} />
+        <TradeFilters
+          filters={filters}
+          onFiltersChange={setFilters}
+          bots={availableBots}
+          symbols={availableSymbols}
+        />
       </Box>
 
-      {/* Tab Navigation */}
       <Box sx={{ mb: 2 }}>
         <Tabs
           value={activeTab}
-          onChange={handleTabChange}
+          onChange={(_, value) => setActiveTab(value)}
           sx={{
             '& .MuiTab-root': { textTransform: 'none', minHeight: 42 },
             '& .MuiTabs-indicator': { height: 2 },
@@ -231,35 +144,22 @@ const Trades: React.FC = () => {
         </Tabs>
       </Box>
 
-      {/* Tab Content */}
       {activeTab === 0 ? (
         <TradeTable
-          trades={tradesData?.trades || []}
-          pagination={
-            tradesData?.pagination || {
-              page: 1,
-              pageSize: 10,
-              totalItems: 0,
-              totalPages: 1,
-            }
-          }
+          trades={pageView.trades}
+          pagination={pageView.pagination}
           sort={sort}
-          isLoading={isLoadingTrades}
+          isLoading={false}
           onSortChange={setSort}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
-          onRowClick={handleRowClick}
+          onRowClick={setSelectedTrade}
         />
       ) : (
-        <TradeAnalysis stats={tradeStats} isLoading={isLoadingStats} />
+        <TradeAnalysis stats={stats} isLoading={false} />
       )}
 
-      {/* Trade Detail Modal */}
-      <TradeDetailModal
-        trade={selectedTrade}
-        open={!!selectedTrade}
-        onClose={handleCloseDetail}
-      />
+      <TradeDetailModal trade={selectedTrade} open={!!selectedTrade} onClose={() => setSelectedTrade(null)} />
     </Box>
   )
 }

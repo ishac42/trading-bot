@@ -19,6 +19,10 @@ export function tradesToCsv(
     'P&L',
     'Commission',
     'Order ID',
+    'Reason',
+    'Shortfall',
+    'Regime',
+    'Session',
   ]
 
   const rows = trades.map((trade) => [
@@ -33,6 +37,10 @@ export function tradesToCsv(
     trade.profit_loss !== undefined ? trade.profit_loss.toFixed(2) : '',
     trade.commission !== undefined ? trade.commission.toFixed(2) : '',
     trade.order_id || '',
+    trade.reason_code || trade.reason || '',
+    trade.shortfall !== undefined ? trade.shortfall.toFixed(2) : '',
+    trade.regime || '',
+    trade.session || '',
   ])
 
   const csvContent = [

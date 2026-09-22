@@ -18,7 +18,7 @@ import {
 import { Card, PnLDisplay, EmptyState } from '@/components/common'
 import type { Trade, TradeSort, TradeSortField, TradePagination } from '@/types'
 import { formatCurrency } from '@/utils/formatters'
-import { useBots } from '@/hooks/useBots'
+import { useBook } from '@/hooks/useBook'
 
 interface TradeTableProps {
   trades: Trade[]
@@ -32,7 +32,7 @@ interface TradeTableProps {
 }
 
 interface Column {
-  id: TradeSortField | 'bot' | 'reason'
+  id: TradeSortField | 'bot' | 'reason' | 'shortfall' | 'regime' | 'session'
   label: string
   sortable: boolean
   align?: 'left' | 'right' | 'center'
@@ -47,7 +47,10 @@ const columns: Column[] = [
   { id: 'price', label: 'Price', sortable: true, align: 'right', minWidth: 90 },
   { id: 'bot', label: 'Bot', sortable: false, minWidth: 120 },
   { id: 'profit_loss', label: 'P&L', sortable: true, align: 'right', minWidth: 90 },
-  { id: 'reason', label: 'Reason', sortable: false, minWidth: 140 },
+  { id: 'reason', label: 'Reason', sortable: false, minWidth: 150 },
+  { id: 'shortfall', label: 'Shortfall', sortable: false, align: 'right', minWidth: 90 },
+  { id: 'regime', label: 'Regime', sortable: false, minWidth: 100 },
+  { id: 'session', label: 'Session', sortable: false, minWidth: 90 },
 ]
 
 /**
@@ -113,24 +116,18 @@ const TradeCardMobile: React.FC<{
         · Qty: {trade.quantity} · {formatCurrency(trade.price)}
       </Typography>
     </Box>
-    <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-      <Typography
-        variant="body2"
-        color="text.secondary"
-        sx={{ fontSize: '0.75rem' }}
-      >
+    <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, mt: 0.5 }}>
+      <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
         {getBotName(trade.bot_id)}
       </Typography>
-      {trade.reason && (
-        <Typography
-          variant="body2"
-          color="text.secondary"
-          sx={{ fontSize: '0.7rem', fontStyle: 'italic' }}
-        >
-          {trade.reason}
-        </Typography>
-      )}
+      <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+        {trade.reason_code || trade.reason || '—'}
+      </Typography>
     </Box>
+    <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem', mt: 0.5 }}>
+      {trade.regime ?? '—'} · {trade.session ?? '—'} · Shortfall{' '}
+      {trade.shortfall != null ? formatCurrency(trade.shortfall) : '—'}
+    </Typography>
   </Box>
 )
 
@@ -163,10 +160,13 @@ export const TradeTable: React.FC<TradeTableProps> = ({
 }) => {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
-  const { data: bots } = useBots()
+  const { bots } = useBook()
 
   const getBotName = React.useCallback(
-    (botId: string) => bots?.find((b) => b.id === botId)?.name || 'Unknown Bot',
+    (botId: string) => {
+      if (!botId) return 'Book'
+      return bots.find((bot) => bot.id === botId)?.name || 'Unknown bot'
+    },
     [bots]
   )
 
@@ -336,13 +336,20 @@ export const TradeTable: React.FC<TradeTableProps> = ({
                     )}
                   </TableCell>
                   <TableCell>
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ fontSize: '0.75rem' }}
-                    >
-                      {trade.reason || '—'}
+                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+                      {trade.reason_code || trade.reason || '—'}
                     </Typography>
+                  </TableCell>
+                  <TableCell align="right">
+                    <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                      {trade.shortfall != null ? formatCurrency(trade.shortfall) : '—'}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2">{trade.regime ?? '—'}</Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2">{trade.session ?? '—'}</Typography>
                   </TableCell>
                 </TableRow>
               ))}
