@@ -5,6 +5,7 @@ import MenuIcon from '@mui/icons-material/Menu'
 
 const navItems = [
   { label: 'Dashboard', path: '/' },
+  { label: 'Bots', path: '/bots' },
   { label: 'Positions', path: '/positions' },
   { label: 'Trades', path: '/trades' },
   { label: 'Analytics', path: '/analytics' },

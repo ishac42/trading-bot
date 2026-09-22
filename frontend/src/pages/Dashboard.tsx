@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import LinkIcon from '@mui/icons-material/Link'
 import { AccountSummary, RecentTradesTable } from '@/components/dashboard'
 import BookSummary from '@/components/dashboard/BookSummary'
+import RunningBots from '@/components/dashboard/RunningBots'
 import BookControls from '@/components/settings/BookControls'
 import { useBook } from '@/hooks/useBook'
 import { useRealtimeDashboard } from '@/hooks/useRealtimeDashboard'
@@ -79,6 +80,10 @@ const Dashboard = () => {
 
       <Box sx={{ mb: { xs: 3, md: 4 } }}>
         <BookControls killSwitch={book.summary.kill_switch} compact />
+      </Box>
+
+      <Box sx={{ mb: { xs: 3, md: 4 } }}>
+        <RunningBots bots={book.bots} />
       </Box>
 
       <Box sx={{ mb: { xs: 3, md: 4 } }}>

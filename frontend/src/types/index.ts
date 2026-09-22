@@ -475,6 +475,47 @@ export interface FeeTier {
   refreshed_at: string
 }
 
+/** Risk a single bot may request. The book caps are the ceiling. */
+export interface BotRiskParameters {
+  risk_per_trade_pct: number
+  max_open_stop_risk_pct: number
+  max_positions: number
+  single_name_notional_pct: number
+  min_score: number
+  min_target_r: number
+  cost_multiple: number
+  /** Negative percent of equity. Stops this bot only. Cannot be looser than the book daily lock. */
+  sleeve_loss_limit_pct: number
+}
+
+export interface BotStats {
+  marked_pnl: number
+  marked_pnl_pct: number
+  trade_count: number
+  win_rate: number
+  expectancy: number
+  veto_count: number
+}
+
+export type BotProfileStatus = 'running' | 'stopped'
+
+/** A bot is a universe profile plus its own risk parameters and statistics. */
+export interface BotProfile {
+  id: string
+  name: string
+  status: BotProfileStatus
+  universe: UniverseFilters
+  snapshot: UniverseSnapshot
+  risk: BotRiskParameters
+  stats: BotStats
+}
+
+export interface BotProfileInput {
+  name: string
+  universe: UniverseFilters
+  risk: BotRiskParameters
+}
+
 export type BookSocketEvent =
   | 'trade_executed'
   | 'position_updated'

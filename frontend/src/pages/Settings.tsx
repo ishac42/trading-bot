@@ -1,5 +1,6 @@
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Box, CircularProgress, Paper, Typography } from '@mui/material'
+import { Button } from '@/components/common'
 import SettingsSidebar from '@/components/settings/SettingsSidebar'
 import { isSettingsSection } from '@/components/settings/settingsSections'
 import type { SettingsSection } from '@/components/settings/settingsSections'
@@ -9,8 +10,6 @@ import DisplayPreferences from '@/components/settings/DisplayPreferences'
 import AppearanceSettings from '@/components/settings/AppearanceSettings'
 import DataManagement from '@/components/settings/DataManagement'
 import ActivityLogPanel from '@/components/settings/ActivityLogPanel'
-import UniverseFilters from '@/components/settings/UniverseFilters'
-import UniversePreview from '@/components/settings/UniversePreview'
 import SessionSettings from '@/components/settings/SessionSettings'
 import FeedSettings from '@/components/settings/FeedSettings'
 import RiskCaps from '@/components/settings/RiskCaps'
@@ -21,9 +20,10 @@ import { useBook } from '@/hooks/useBook'
 const CONTROL_SECTIONS: SettingsSection[] = ['universe', 'session', 'feed', 'risk', 'mode', 'appearance', 'activity']
 
 const Settings = () => {
+  const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const sectionParam = params.get('section')
-  const activeSection: SettingsSection = isSettingsSection(sectionParam) ? sectionParam : 'universe'
+  const activeSection: SettingsSection = isSettingsSection(sectionParam) ? sectionParam : 'risk'
   const book = useBook()
 
   const {
@@ -58,10 +58,17 @@ const Settings = () => {
     switch (activeSection) {
       case 'universe':
         return (
-          <>
-            <UniverseFilters filters={book.universe} />
-            <UniversePreview snapshot={book.snapshot} />
-          </>
+          <Box>
+            <Typography variant="h6" gutterBottom>
+              Universe filters live on each bot
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Book risk on this page is the ceiling. Each bot has its own universe and risk parameters inside that ceiling.
+            </Typography>
+            <Button variant="primary" onClick={() => navigate('/bots')}>
+              Open bots
+            </Button>
+          </Box>
         )
       case 'session':
         return <SessionSettings session={book.session} />

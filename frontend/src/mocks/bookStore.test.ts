@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
+  createBotProfile,
+  defaultBotRisk,
   defaultRisk,
   flattenBook,
   getBookState,
@@ -8,6 +10,7 @@ import {
   saveRisk,
   saveUniverseFilters,
   setBookScenario,
+  startBotProfile,
   unlockBook,
 } from './bookStore'
 
@@ -35,6 +38,20 @@ describe('book store', () => {
     expect(getBookState().summary.position_count).toBe(0)
     expect(unlockBook().ok).toBe(true)
     expect(getBookState().summary.kill_switch.locked).toBe(false)
+  })
+
+  it('clamps a bot risk sleeve to the book ceiling and refuses start while halted', () => {
+    const created = createBotProfile({
+      name: 'Wide sleeve',
+      universe: { top_n: 75, min_price: 5, max_spread_bps: 12 },
+      risk: { ...defaultBotRisk, risk_per_trade_pct: 5, sleeve_loss_limit_pct: -10 },
+    })
+    expect(created.ok).toBe(true)
+    const createdBot = getBookState().bots.find((bot) => bot.name === 'Wide sleeve')
+    expect(createdBot?.risk.risk_per_trade_pct).toBe(0.25)
+    expect(createdBot?.risk.sleeve_loss_limit_pct).toBe(-2)
+    setBookScenario('locked')
+    expect(startBotProfile(createdBot!.id).ok).toBe(false)
   })
 
   it('refuses unlock while marked daily loss is at the lock', () => {

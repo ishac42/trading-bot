@@ -19,7 +19,9 @@ UI-0 through UI-3 shipped a single Universe section and removed the Bots tab. Th
 - Several bots may run. The book risk engine sizes from the bot’s parameters, then shrinks or refuses the order so the sum stays inside the book budget.
 - Dashboard shows the book and the running bots. `/bots` is a real route again.
 
-Next UI slice: restore Bots list, create, and edit in that narrower form, and show per-bot stats on the dashboard. Do not wire the old `useBots` factory payload back in. Add profile types (universe filters + `RiskCaps`) to the book contract first.
+Next UI slice: restore Bots list, create, and edit in that narrower form, and show per-bot stats on the dashboard. Do not wire the old `useBots` factory payload back in. Add profile types (universe filters + per-bot risk) to the book contract first.
+
+Phases UI-1 through UI-8 below record the single-universe cut that already shipped, including “remove the Bots tab.” Where those checklists disagree with this decision, this decision wins.
 
 ---
 

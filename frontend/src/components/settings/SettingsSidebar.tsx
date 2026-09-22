@@ -12,7 +12,6 @@ import {
   MenuItem,
   FormControl,
 } from '@mui/material'
-import PublicIcon from '@mui/icons-material/Public'
 import ScheduleIcon from '@mui/icons-material/Schedule'
 import RssFeedIcon from '@mui/icons-material/RssFeed'
 import ShieldIcon from '@mui/icons-material/Shield'
@@ -31,10 +30,9 @@ interface SectionItem {
 }
 
 const sections: SectionItem[] = [
-  { id: 'universe', label: 'Universe', icon: <PublicIcon /> },
+  { id: 'risk', label: 'Book risk', icon: <ShieldIcon /> },
   { id: 'session', label: 'Session', icon: <ScheduleIcon /> },
   { id: 'feed', label: 'Feed', icon: <RssFeedIcon /> },
-  { id: 'risk', label: 'Risk', icon: <ShieldIcon /> },
   { id: 'mode', label: 'Account Mode', icon: <AccountBalanceWalletIcon /> },
   { id: 'broker', label: 'Broker Connection', icon: <VpnKeyIcon /> },
   { id: 'notifications', label: 'Notifications', icon: <NotificationsIcon /> },

@@ -3,6 +3,9 @@ import type {
   ActivityLogEntry,
   BookScenario,
   BookSummary,
+  BotProfile,
+  BotProfileInput,
+  BotRiskParameters,
   FeeTier,
   FeedSettings,
   RiskCaps,
@@ -197,6 +200,65 @@ function summaryFor(scenario: BookScenario): BookSummary {
   return base
 }
 
+export const defaultBotRisk: BotRiskParameters = {
+  risk_per_trade_pct: 0.25,
+  max_open_stop_risk_pct: 0.75,
+  max_positions: 3,
+  single_name_notional_pct: 25,
+  min_score: 70,
+  min_target_r: 1.5,
+  cost_multiple: 3,
+  sleeve_loss_limit_pct: -1.5,
+}
+
+const emptyStats = {
+  marked_pnl: 0,
+  marked_pnl_pct: 0,
+  trade_count: 0,
+  win_rate: 0,
+  expectancy: 0,
+  veto_count: 0,
+}
+
+function seedBots(): BotProfile[] {
+  const liquid: UniverseFilters = { top_n: 75, min_price: 5, max_spread_bps: 12 }
+  const tight: UniverseFilters = { top_n: 50, min_price: 20, max_spread_bps: 10 }
+  return [
+    {
+      id: 'bot-liquid',
+      name: 'Liquid leaders',
+      status: 'running',
+      universe: liquid,
+      snapshot: snapshotFor(liquid),
+      risk: { ...defaultBotRisk },
+      stats: {
+        marked_pnl: 86.2,
+        marked_pnl_pct: 1.72,
+        trade_count: 14,
+        win_rate: 57,
+        expectancy: 0.18,
+        veto_count: 22,
+      },
+    },
+    {
+      id: 'bot-tight',
+      name: 'Tight spreads',
+      status: 'stopped',
+      universe: tight,
+      snapshot: snapshotFor(tight),
+      risk: { ...defaultBotRisk, risk_per_trade_pct: 0.15, max_positions: 2, sleeve_loss_limit_pct: -1 },
+      stats: {
+        marked_pnl: -12.4,
+        marked_pnl_pct: -0.25,
+        trade_count: 6,
+        win_rate: 33,
+        expectancy: -0.04,
+        veto_count: 9,
+      },
+    },
+  ]
+}
+
 export interface BookState {
   scenario: BookScenario
   universe: UniverseFilters
@@ -209,6 +271,7 @@ export interface BookState {
   summary: BookSummary
   trades: Trade[]
   activity: ActivityLogEntry[]
+  bots: BotProfile[]
 }
 
 function createState(scenario: BookScenario): BookState {
@@ -225,6 +288,7 @@ function createState(scenario: BookScenario): BookState {
     summary: summaryFor(scenario),
     trades: scenario === 'empty' ? [] : sampleTrades,
     activity: vetoLogs,
+    bots: seedBots(),
   }
 }
 
@@ -262,6 +326,7 @@ export function setBookScenario(scenario: BookScenario) {
     risk: current.risk,
     mode: current.mode,
     feeTier: current.feeTier,
+    bots: current.bots,
     snapshot: snapshotFor(current.universe, scenario === 'empty' ? [] : sampleMembers),
   })
 }
@@ -316,8 +381,13 @@ export function saveRisk(risk: RiskCaps): BookActionResult {
     min_target_r: Math.max(RISK_HARD_CAPS.min_target_r, risk.min_target_r),
     cost_multiple: Math.max(RISK_HARD_CAPS.cost_multiple, risk.cost_multiple),
   }
-  emit({ ...state, risk: next, summary: { ...state.summary, max_positions: next.max_positions, daily_lock_pct: next.hard_daily_lock_pct } })
-  return { ok: true, message: 'Risk caps saved inside the hard limits.' }
+  emit({
+    ...state,
+    risk: next,
+    summary: { ...state.summary, max_positions: next.max_positions, daily_lock_pct: next.hard_daily_lock_pct },
+    bots: state.bots.map((bot) => ({ ...bot, risk: clampBotRisk(bot.risk, next) })),
+  })
+  return { ok: true, message: 'Book risk caps saved. Bot parameters were clamped to the new ceiling.' }
 }
 
 export function saveMode(mode: AccountMode): BookActionResult {
@@ -375,6 +445,103 @@ export function unlockBook(): BookActionResult {
     },
   })
   return { ok: true, message: 'Book unlocked. Flattened positions stay closed.' }
+}
+
+export function clampUniverseFilters(filters: UniverseFilters): UniverseFilters {
+  return {
+    top_n: Math.round(clamp(filters.top_n, UNIVERSE_LIMITS.topNMin, UNIVERSE_LIMITS.topNMax)),
+    min_price: Math.max(UNIVERSE_LIMITS.minPrice, filters.min_price),
+    max_spread_bps: clamp(filters.max_spread_bps, UNIVERSE_LIMITS.spreadMin, UNIVERSE_LIMITS.spreadMax),
+  }
+}
+
+export function previewUniverse(filters: UniverseFilters): UniverseSnapshot {
+  const universe = clampUniverseFilters(filters)
+  return snapshotFor(universe, state.scenario === 'empty' ? [] : sampleMembers)
+}
+
+export function clampBotRisk(risk: BotRiskParameters, book: RiskCaps = state.risk): BotRiskParameters {
+  return {
+    risk_per_trade_pct: clamp(risk.risk_per_trade_pct, 0.01, book.risk_per_trade_pct),
+    max_open_stop_risk_pct: clamp(risk.max_open_stop_risk_pct, 0.01, book.max_open_stop_risk_pct),
+    max_positions: Math.round(clamp(risk.max_positions, 1, book.max_positions)),
+    single_name_notional_pct: clamp(risk.single_name_notional_pct, 1, book.single_name_notional_pct),
+    min_score: Math.round(clamp(risk.min_score, book.min_score, 100)),
+    min_target_r: Math.max(book.min_target_r, risk.min_target_r),
+    cost_multiple: Math.max(book.cost_multiple, risk.cost_multiple),
+    sleeve_loss_limit_pct: clamp(risk.sleeve_loss_limit_pct, book.hard_daily_lock_pct, -0.1),
+  }
+}
+
+function profileFromInput(id: string, input: BotProfileInput, stats: BotProfile['stats'], status: BotProfile['status']): BotProfile {
+  const universe = clampUniverseFilters(input.universe)
+  return {
+    id,
+    name: input.name.trim(),
+    status,
+    universe,
+    snapshot: snapshotFor(universe, state.scenario === 'empty' ? [] : sampleMembers),
+    risk: clampBotRisk(input.risk),
+    stats,
+  }
+}
+
+export function createBotProfile(input: BotProfileInput): BookActionResult {
+  if (!input.name.trim()) {
+    return { ok: false, message: 'A bot needs a name.' }
+  }
+  const profile = profileFromInput(`bot-${Date.now()}`, input, emptyStats, 'stopped')
+  emit({ ...state, bots: [...state.bots, profile] })
+  return { ok: true, message: `${profile.name} created. Start it when you want that universe scanned.` }
+}
+
+export function updateBotProfile(id: string, input: BotProfileInput): BookActionResult {
+  const existing = state.bots.find((bot) => bot.id === id)
+  if (!existing) {
+    return { ok: false, message: 'That bot no longer exists.' }
+  }
+  if (!input.name.trim()) {
+    return { ok: false, message: 'A bot needs a name.' }
+  }
+  const profile = profileFromInput(id, input, existing.stats, existing.status)
+  emit({ ...state, bots: state.bots.map((bot) => (bot.id === id ? profile : bot)) })
+  return { ok: true, message: `${profile.name} saved. Risk parameters stay inside the book caps.` }
+}
+
+export function deleteBotProfile(id: string): BookActionResult {
+  const existing = state.bots.find((bot) => bot.id === id)
+  if (!existing) {
+    return { ok: false, message: 'That bot no longer exists.' }
+  }
+  emit({ ...state, bots: state.bots.filter((bot) => bot.id !== id) })
+  return { ok: true, message: `${existing.name} removed. Its past fills stay on the book.` }
+}
+
+export function startBotProfile(id: string): BookActionResult {
+  const existing = state.bots.find((bot) => bot.id === id)
+  if (!existing) {
+    return { ok: false, message: 'That bot no longer exists.' }
+  }
+  if (state.summary.kill_switch.locked || state.summary.kill_switch.halted) {
+    return { ok: false, message: 'The book is halted. Unlock it before starting a bot.' }
+  }
+  emit({
+    ...state,
+    bots: state.bots.map((bot) => (bot.id === id ? { ...bot, status: 'running' } : bot)),
+  })
+  return { ok: true, message: `${existing.name} is scanning its universe on this book.` }
+}
+
+export function stopBotProfile(id: string): BookActionResult {
+  const existing = state.bots.find((bot) => bot.id === id)
+  if (!existing) {
+    return { ok: false, message: 'That bot no longer exists.' }
+  }
+  emit({
+    ...state,
+    bots: state.bots.map((bot) => (bot.id === id ? { ...bot, status: 'stopped' } : bot)),
+  })
+  return { ok: true, message: `${existing.name} stopped. Open positions stay on the book until you flatten them.` }
 }
 
 export function engageKillSwitch(): BookActionResult {
