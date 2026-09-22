@@ -16,17 +16,16 @@ function errorMessage(error: unknown, fallback: string): string {
   return fallback
 }
 
-function applySettings(data: AllSettings, summary?: BookSummary) {
+function applySettings(data: Partial<AllSettings> | undefined, summary?: BookSummary) {
   applyPersistedBook({
-    universe: data.universe,
-    session: data.session,
-    feed: data.feed,
-    risk: data.risk,
-    mode: data.mode.mode,
-    feeTier: {
-      version: data.fees?.version ?? '',
-      refreshed_at: data.fees?.refreshed_at ?? '',
-    },
+    universe: data?.universe,
+    session: data?.session,
+    feed: data?.feed,
+    risk: data?.risk,
+    mode: data?.mode?.mode,
+    feeTier: data?.fees
+      ? { version: data.fees.version ?? '', refreshed_at: data.fees.refreshed_at ?? '' }
+      : undefined,
     summary,
   })
 }

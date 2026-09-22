@@ -15,6 +15,7 @@ import {
   applyBookSocketEvent,
   applyServerBot,
   applyServerBots,
+  completeBot,
   botListEpochNow,
   bumpBotListEpoch,
   closeBookPosition,
@@ -102,6 +103,14 @@ describe('book store', () => {
     expect(getBookState().summary.open_stop_risk).toBeLessThan(riskBefore)
     expect(getBookState().summary.position_count).toBe(1)
     expect(getBookState().bots.find((bot) => bot.id === before.bot_id)?.status).toBe('running')
+  })
+
+  it('fills book defaults when a saved bot has no risk sleeve', () => {
+    const saved = completeBot({ id: 'bot-1', name: 'bot1', status: 'running' })
+    expect(saved.risk.risk_per_trade_pct).toBe(0.25)
+    expect(saved.snapshot.members).toEqual([])
+    applyServerBots([saved], botListEpochNow())
+    expect(getBookState().bots[0]?.risk.risk_per_trade_pct).toBe(0.25)
   })
 
   it('keeps a saved bot when an older list response arrives', () => {

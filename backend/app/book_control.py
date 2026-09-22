@@ -74,6 +74,20 @@ def default_book_state() -> dict[str, Any]:
     }
 
 
+def default_sleeve() -> dict[str, Any]:
+    book = default_risk()
+    return {
+        "risk_per_trade_pct": book["risk_per_trade_pct"],
+        "max_open_stop_risk_pct": book["max_open_stop_risk_pct"],
+        "max_positions": book["max_positions"],
+        "single_name_notional_pct": book["single_name_notional_pct"],
+        "min_score": book["min_score"],
+        "min_target_r": book["min_target_r"],
+        "cost_multiple": book["cost_multiple"],
+        "sleeve_loss_limit_pct": -1.5,
+    }
+
+
 def default_bot_stats() -> dict[str, Any]:
     return {
         "marked_pnl": 0.0,

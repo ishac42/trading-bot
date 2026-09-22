@@ -162,6 +162,23 @@ const emptyStats = {
   veto_count: 0,
 }
 
+export function completeBot(raw: Partial<BotProfile> | null | undefined): BotProfile {
+  const universe = { ...defaultUniverseFilters, ...(raw?.universe ?? {}) }
+  return {
+    id: String(raw?.id ?? ''),
+    name: raw?.name || 'Bot',
+    status: raw?.status === 'running' ? 'running' : 'stopped',
+    universe,
+    risk: { ...defaultBotRisk, ...(raw?.risk ?? {}) },
+    stats: { ...emptyStats, ...(raw?.stats ?? {}) },
+    snapshot: {
+      as_of: raw?.snapshot?.as_of ?? '',
+      filters: { ...universe, ...(raw?.snapshot?.filters ?? {}) },
+      members: raw?.snapshot?.members ?? [],
+    },
+  }
+}
+
 export interface BookState {
   scenario: BookScenario
   universe: UniverseFilters
@@ -214,7 +231,7 @@ export function bumpBotListEpoch(): number {
 
 export function applyServerBots(bots: BotProfile[], epoch: number) {
   if (epoch !== botListEpoch) return
-  emit({ ...state, bots, botsLoaded: true })
+  emit({ ...state, bots: (bots ?? []).map((bot) => completeBot(bot)), botsLoaded: true })
 }
 
 export function markBotsLoaded(epoch: number) {
@@ -224,9 +241,10 @@ export function markBotsLoaded(epoch: number) {
 
 export function applyServerBot(bot: BotProfile) {
   bumpBotListEpoch()
-  const bots = state.bots.some((item) => item.id === bot.id)
-    ? state.bots.map((item) => (item.id === bot.id ? bot : item))
-    : [...state.bots, bot]
+  const saved = completeBot(bot)
+  const bots = state.bots.some((item) => item.id === saved.id)
+    ? state.bots.map((item) => (item.id === saved.id ? saved : item))
+    : [...state.bots, saved]
   emit({ ...state, bots, botsLoaded: true })
 }
 
@@ -359,7 +377,7 @@ export function applyPersistedBook(partial: {
   feeTier?: FeeTier
   summary?: BookSummary
 }) {
-  const risk = partial.risk ?? state.risk
+  const risk = { ...defaultRisk, ...(partial.risk ?? state.risk ?? {}) }
   const summary = partial.summary
     ? { ...partial.summary, max_positions: risk.max_positions, daily_lock_pct: risk.hard_daily_lock_pct }
     : { ...state.summary, max_positions: risk.max_positions, daily_lock_pct: risk.hard_daily_lock_pct }
@@ -373,7 +391,10 @@ export function applyPersistedBook(partial: {
     feeTier: partial.feeTier ?? state.feeTier,
     summary,
     bots: partial.risk
-      ? state.bots.map((bot) => ({ ...bot, risk: clampBotRisk(bot.risk, risk) }))
+      ? state.bots.map((bot) => {
+          const filled = completeBot(bot)
+          return { ...filled, risk: clampBotRisk(filled.risk, risk) }
+        })
       : state.bots,
   })
 }

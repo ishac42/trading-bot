@@ -60,12 +60,12 @@ const BotList = () => {
                     <StatusBadge status={bot.status} />
                   </Box>
                   <Typography variant="body2" color="text.secondary">
-                    Top {bot.universe.top_n} · price ≥ ${bot.universe.min_price} · spread ≤ {bot.universe.max_spread_bps} bps ·{' '}
-                    {bot.snapshot.members.length} names
+                    Top {bot.universe?.top_n ?? 0} · price ≥ ${bot.universe?.min_price ?? 0} · spread ≤ {bot.universe?.max_spread_bps ?? 0} bps ·{' '}
+                    {bot.snapshot?.members.length ?? 0} names
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    {bot.risk.risk_per_trade_pct}% per trade · {bot.risk.max_positions} positions · sleeve{' '}
-                    {bot.risk.sleeve_loss_limit_pct}%
+                    {bot.risk?.risk_per_trade_pct ?? 0}% per trade · {bot.risk?.max_positions ?? 0} positions · sleeve{' '}
+                    {bot.risk?.sleeve_loss_limit_pct ?? 0}%
                   </Typography>
                 </Box>
                 <Box sx={{ textAlign: { xs: 'left', sm: 'right' } }}>

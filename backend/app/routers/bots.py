@@ -18,6 +18,7 @@ from app.book_control import (
     book_state,
     default_bot_stats,
     default_risk,
+    default_sleeve,
     default_universe,
     empty_snapshot,
     read_category,
@@ -36,7 +37,9 @@ def _profile_response(bot: Bot) -> dict:
     profile = bot.profile or {}
     universe = profile.get("universe") or default_universe()
     snapshot = profile.get("snapshot") or empty_snapshot(universe)
-    risk = profile.get("risk")
+    raw_risk = profile.get("risk") if isinstance(profile.get("risk"), dict) else {}
+    risk = default_sleeve()
+    risk.update({key: value for key, value in raw_risk.items() if value is not None})
     stats = profile.get("stats") or default_bot_stats()
     status = "running" if bot.status == "running" else "stopped"
     return {

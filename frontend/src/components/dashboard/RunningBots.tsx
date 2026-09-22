@@ -43,8 +43,8 @@ const RunningBots = ({ bots }: RunningBotsProps) => {
                     <StatusBadge status="running" />
                   </Box>
                   <Typography variant="body2" color="text.secondary">
-                    {bot.snapshot.members.length} names · {bot.risk.risk_per_trade_pct}% per trade · sleeve{' '}
-                    {bot.risk.sleeve_loss_limit_pct}%
+                    {bot.snapshot?.members.length ?? 0} names · {bot.risk?.risk_per_trade_pct ?? 0}% per trade · sleeve{' '}
+                    {bot.risk?.sleeve_loss_limit_pct ?? 0}%
                   </Typography>
                 </Box>
                 <Box sx={{ textAlign: { xs: 'left', sm: 'right' } }}>
