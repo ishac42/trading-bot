@@ -470,3 +470,26 @@ class Fill(Base):
     slippage: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     shortfall: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     filled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+
+class ResearchTrial(Base):
+    """One parameter attempt, including the ones that fail a gate."""
+
+    __tablename__ = "research_trials"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    params: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    params_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    gate: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    failure_reason: Mapped[str | None] = mapped_column(String(64), nullable=True, default=None)
+    metrics: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    data_source: Mapped[str] = mapped_column(String(32), nullable=False, default="historical_bars")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+    __table_args__ = (
+        Index("ix_research_trials_user_created", "user_id", "created_at"),
+    )
