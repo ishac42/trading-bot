@@ -189,7 +189,7 @@ const BotProfileEditorForm = ({ botId }: { botId?: string }) => {
 
       <Snackbar
         open={notice !== null}
-        autoHideDuration={3000}
+        autoHideDuration={8000}
         onClose={() => setNotice(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >

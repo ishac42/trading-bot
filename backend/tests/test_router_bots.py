@@ -62,6 +62,16 @@ class TestBotProfiles:
             "indicators": {"RSI": {}},
         })
         assert resp.status_code == 422
+        message = resp.json()["error"]["message"]
+        assert "universe is required" in message
+        assert "risk is required" in message
+
+    async def test_missing_required_field_is_named(self, client):
+        resp = await client.post("/api/bots", json={"name": "bot1", "universe": {"top_n": 75, "min_price": 5, "max_spread_bps": 12}})
+        assert resp.status_code == 422
+        message = resp.json()["error"]["message"]
+        assert "risk is required" in message
+        assert message != "Field required"
 
     async def test_start_stop_and_delete(self, client, sample_bot):
         started = await client.post(f"/api/bots/{sample_bot['id']}/start")

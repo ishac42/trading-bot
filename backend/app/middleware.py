@@ -64,14 +64,32 @@ async def app_exception_handler(request: Request, exc: AppException) -> JSONResp
     )
 
 
+def _field_path(loc: tuple) -> str:
+    parts = [str(part) for part in loc if part not in ("body", "query", "path", "response")]
+    return ".".join(parts)
+
+
+def _field_error_text(field: str, message: str) -> str:
+    if message == "Field required" and field:
+        return f"{field} is required"
+    if field and field not in message:
+        return f"{field}: {message}"
+    return message
+
+
 async def validation_exception_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
     request_id = getattr(request.state, "request_id", None)
-    field_errors = [
-        {"field": " → ".join(str(loc) for loc in e["loc"]), "message": e["msg"]}
-        for e in exc.errors()
-    ]
+    field_errors = []
+    for err in exc.errors():
+        field = _field_path(tuple(err.get("loc") or ()))
+        message = _field_error_text(field, str(err.get("msg") or "Invalid value"))
+        field_errors.append({
+            "field": " → ".join(str(part) for part in (err.get("loc") or ())),
+            "message": message,
+        })
+    summary = "; ".join(item["message"] for item in field_errors) or "Request validation failed"
     logger.warning(
         "validation_error",
         errors=field_errors,
@@ -80,7 +98,7 @@ async def validation_exception_handler(
     return _error_response(
         status_code=422,
         code="VALIDATION_ERROR",
-        message="Request validation failed",
+        message=summary,
         details={"errors": field_errors},
         request_id=request_id,
     )

@@ -1,4 +1,3 @@
-import axios from 'axios'
 import {
   applyServerBot,
   applyServerBotRemoval,
@@ -10,6 +9,7 @@ import {
   type BookActionResult,
 } from '@/mocks/bookStore'
 import { api } from '@/services/api'
+import { apiErrorMessage } from '@/services/apiError'
 import type { BotProfile, BotProfileInput } from '@/types'
 
 function normalize(raw: BotProfile): BotProfile {
@@ -28,18 +28,6 @@ function normalize(raw: BotProfile): BotProfile {
   }
 }
 
-function errorMessage(error: unknown, fallback: string): string {
-  if (axios.isAxiosError(error)) {
-    const body = error.response?.data as {
-      error?: { message?: string; details?: { errors?: { message?: string }[] } }
-    }
-    const field = body?.error?.details?.errors?.find((item) => item.message)?.message
-    if (field) return field
-    if (body?.error?.message) return body.error.message
-  }
-  return fallback
-}
-
 function writeBody(input: BotProfileInput) {
   return {
     name: input.name.trim(),
@@ -56,7 +44,7 @@ export async function loadBotProfiles(): Promise<BookActionResult> {
     return { ok: true, message: '' }
   } catch (error) {
     markBotsLoaded(epoch)
-    return { ok: false, message: errorMessage(error, 'Could not load bots.') }
+    return { ok: false, message: apiErrorMessage(error, 'Could not load bots.') }
   }
 }
 
@@ -74,7 +62,7 @@ export async function saveBotProfile(input: BotProfileInput, id?: string): Promi
       message: id ? `${saved.name} saved.` : `${saved.name} saved.`,
     }
   } catch (error) {
-    return { ok: false, message: errorMessage(error, 'Could not save the bot.') }
+    return { ok: false, message: apiErrorMessage(error, 'Could not save the bot.') }
   }
 }
 
@@ -83,7 +71,7 @@ export async function removeBotProfile(id: string, name: string): Promise<BookAc
     await api.deleteBot(id)
     return applyServerBotRemoval(id, name)
   } catch (error) {
-    return { ok: false, message: errorMessage(error, 'Could not delete the bot.') }
+    return { ok: false, message: apiErrorMessage(error, 'Could not delete the bot.') }
   }
 }
 
@@ -99,6 +87,6 @@ export async function setBotProfileRunning(id: string, running: boolean): Promis
         : `${saved.name} stopped. Open positions stay on the book until you flatten them.`,
     }
   } catch (error) {
-    return { ok: false, message: errorMessage(error, running ? 'Could not start the bot.' : 'Could not stop the bot.') }
+    return { ok: false, message: apiErrorMessage(error, running ? 'Could not start the bot.' : 'Could not stop the bot.') }
   }
 }
