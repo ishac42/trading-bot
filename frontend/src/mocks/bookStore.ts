@@ -501,6 +501,17 @@ export function previewUniverse(filters: UniverseFilters): UniverseSnapshot {
   return snapshotFor(universe, state.snapshot.members)
 }
 
+const riskFieldLabel: Record<keyof BotRiskParameters, string> = {
+  risk_per_trade_pct: 'Risk per trade',
+  max_open_stop_risk_pct: 'Max open stop-risk',
+  max_positions: 'Max positions',
+  single_name_notional_pct: 'Single-name notional',
+  min_score: 'Minimum score',
+  min_target_r: 'Minimum target',
+  cost_multiple: 'Cost multiple',
+  sleeve_loss_limit_pct: 'Sleeve loss limit',
+}
+
 export function clampBotRisk(risk: BotRiskParameters, book: RiskCaps = state.risk): BotRiskParameters {
   return {
     risk_per_trade_pct: clamp(risk.risk_per_trade_pct, 0.01, book.risk_per_trade_pct),
@@ -512,6 +523,13 @@ export function clampBotRisk(risk: BotRiskParameters, book: RiskCaps = state.ris
     cost_multiple: Math.max(book.cost_multiple, risk.cost_multiple),
     sleeve_loss_limit_pct: clamp(risk.sleeve_loss_limit_pct, book.hard_daily_lock_pct, -0.1),
   }
+}
+
+export function riskClampNote(typed: BotRiskParameters, saved: BotRiskParameters): string {
+  const held = (Object.keys(riskFieldLabel) as (keyof BotRiskParameters)[]).filter((key) => typed[key] !== saved[key])
+  if (!held.length) return ''
+  const details = held.map((key) => `${riskFieldLabel[key]} saved as ${saved[key]}`)
+  return `The book ceiling kept ${details.join(', ')}.`
 }
 
 function profileFromInput(id: string, input: BotProfileInput, stats: BotProfile['stats'], status: BotProfile['status']): BotProfile {

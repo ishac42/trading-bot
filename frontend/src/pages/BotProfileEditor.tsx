@@ -9,6 +9,7 @@ import {
   clampBotRisk,
   clampUniverseFilters,
   defaultBotRisk,
+  getBookState,
   previewUniverse,
   UNIVERSE_LIMITS,
   type BookActionResult,
@@ -55,7 +56,15 @@ const BotProfileEditorForm = ({ botId }: { botId?: string }) => {
     const result = await saveBotProfile({ name, universe, risk }, existing?.id)
     setSaving(false)
     setNotice(result)
-    if (result.ok) {
+    if (result.ok && existing?.id) {
+      const saved = getBookState().bots.find((bot) => bot.id === existing.id)
+      if (saved) {
+        setName(saved.name)
+        setUniverse(saved.universe)
+        setRisk(saved.risk)
+      }
+    }
+    if (result.ok && !existing?.id) {
       window.setTimeout(() => navigate('/bots'), 400)
     }
   }

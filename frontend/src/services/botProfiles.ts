@@ -5,6 +5,7 @@ import {
   botListEpochNow,
   clampBotRisk,
   clampUniverseFilters,
+  riskClampNote,
   markBotsLoaded,
   type BookActionResult,
 } from '@/mocks/bookStore'
@@ -57,9 +58,10 @@ export async function saveBotProfile(input: BotProfileInput, id?: string): Promi
     const response = id ? await api.updateBot(id, body) : await api.createBot(body)
     const saved = normalize(response.data as BotProfile)
     applyServerBot(saved)
+    const note = riskClampNote(input.risk, saved.risk)
     return {
       ok: true,
-      message: id ? `${saved.name} saved.` : `${saved.name} saved.`,
+      message: note ? `${saved.name} saved. ${note}` : `${saved.name} saved.`,
     }
   } catch (error) {
     return { ok: false, message: apiErrorMessage(error, 'Could not save the bot.') }

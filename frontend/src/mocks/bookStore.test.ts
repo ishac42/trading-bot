@@ -13,11 +13,13 @@ import {
   saveUniverseFilters,
   setBookScenario,
   applyBookSocketEvent,
+  clampBotRisk,
   applyPersistedBook,
   applyServerBot,
   applyServerBots,
   completeBot,
   completeSummary,
+  riskClampNote,
   botListEpochNow,
   bumpBotListEpoch,
   closeBookPosition,
@@ -114,6 +116,16 @@ describe('book store', () => {
     expect(saved.snapshot.members).toEqual([])
     applyServerBots([saved], botListEpochNow())
     expect(getBookState().bots[0]?.risk.risk_per_trade_pct).toBe(0.25)
+  })
+
+  it('names risk fields held at the book ceiling', () => {
+    const saved = clampBotRisk({ ...defaultBotRisk, risk_per_trade_pct: 2, max_open_stop_risk_pct: 5 })
+    expect(saved.risk_per_trade_pct).toBe(0.25)
+    expect(saved.max_open_stop_risk_pct).toBe(0.75)
+    expect(riskClampNote({ ...defaultBotRisk, risk_per_trade_pct: 2, max_open_stop_risk_pct: 5 }, saved)).toBe(
+      'The book ceiling kept Risk per trade saved as 0.25, Max open stop-risk saved as 0.75.',
+    )
+    expect(riskClampNote(defaultBotRisk, defaultBotRisk)).toBe('')
   })
 
   it('fills data freshness when a summary payload omits it', () => {
