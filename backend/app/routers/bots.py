@@ -20,13 +20,16 @@ from app.book_control import (
     default_risk,
     default_sleeve,
     default_universe,
+    build_universe_snapshot,
     empty_snapshot,
     read_category,
+    snapshot_payload,
+    store_snapshot,
 )
 from app.database import get_db
 from app.exceptions import ConflictError, GoneError, NotFoundError
 from app.models import Bot, User, utcnow
-from app.schemas import BotProfileResponseSchema, BotProfileWriteSchema
+from app.schemas import BotProfileResponseSchema, BotProfileWriteSchema, UniverseFiltersSchema
 
 logger = structlog.get_logger(__name__)
 
@@ -100,6 +103,21 @@ async def _write_profile(db: AsyncSession, user: User, body: BotProfileWriteSche
         bot.profile = profile
         bot.updated_at = utcnow()
     await db.flush()
+    await _scan_into_profile(db, user.id, bot)
+    return bot
+
+
+async def _scan_into_profile(db: AsyncSession, user_id: str, bot: Bot, filters: dict | None = None) -> Bot:
+    """Quote the liquid list and store the names that pass this bot's filters."""
+    profile = dict(bot.profile or {})
+    chosen = filters if filters is not None else (profile.get("universe") or {})
+    members = await build_universe_snapshot(user_id, chosen)
+    row = await store_snapshot(db, user_id, chosen, members)
+    profile["universe"] = dict(chosen)
+    profile["snapshot"] = snapshot_payload(row, chosen)
+    bot.profile = profile
+    bot.updated_at = utcnow()
+    await db.flush()
     return bot
 
 
@@ -159,6 +177,19 @@ async def delete_bot(
     await db.delete(bot)
     await db.flush()
     return {"success": True}
+
+
+@router.post("/{bot_id}/scan", response_model=BotProfileResponseSchema)
+async def scan_bot(
+    bot_id: str,
+    body: UniverseFiltersSchema,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Force a membership scan for the filters on the bot editor."""
+    bot = await _owned_profile(db, user.id, bot_id)
+    bot = await _scan_into_profile(db, user.id, bot, body.model_dump())
+    return _profile_response(bot)
 
 
 @router.post("/{bot_id}/start", response_model=BotProfileResponseSchema)

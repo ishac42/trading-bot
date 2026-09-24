@@ -77,6 +77,8 @@ export const api = {
   updateBot: (id: string, data: any) => apiClient.put(`/bots/${id}`, data),
   deleteBot: (id: string) => apiClient.delete(`/bots/${id}`),
   startBot: (id: string) => apiClient.post(`/bots/${id}/start`),
+  scanBot: (id: string, universe: { top_n: number; min_price: number; max_spread_bps: number }) =>
+    apiClient.post(`/bots/${id}/scan`, universe),
   stopBot: (id: string) => apiClient.post(`/bots/${id}/stop`),
   pauseBot: (id: string) => apiClient.post(`/bots/${id}/pause`),
 

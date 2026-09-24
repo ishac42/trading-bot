@@ -27,7 +27,7 @@ const UniversePreview = ({ snapshot, loading = false }: UniversePreviewProps) =>
         Membership snapshot
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        As of {new Date(snapshot.as_of).toLocaleString()} · top {snapshot.filters.top_n} · price ≥ $
+        As of {snapshot.as_of ? new Date(snapshot.as_of).toLocaleString() : 'not scanned yet'} · top {snapshot.filters.top_n} · price ≥ $
         {snapshot.filters.min_price} · spread ≤ {snapshot.filters.max_spread_bps} bps
       </Typography>
 

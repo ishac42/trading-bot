@@ -14,7 +14,7 @@ import {
   UNIVERSE_LIMITS,
   type BookActionResult,
 } from '@/mocks/bookStore'
-import { saveBotProfile } from '@/services/botProfiles'
+import { refreshBotSnapshot, saveBotProfile } from '@/services/botProfiles'
 import type { BotRiskParameters, UniverseFilters } from '@/types'
 
 const BotProfileEditor = () => {
@@ -42,6 +42,7 @@ const BotProfileEditorForm = ({ botId }: { botId?: string }) => {
   const [risk, setRisk] = useState<BotRiskParameters>(existing?.risk ?? clampBotRisk(defaultBotRisk, book.risk))
   const [notice, setNotice] = useState<BookActionResult | null>(null)
   const [saving, setSaving] = useState(false)
+  const [scanning, setScanning] = useState(false)
 
   const filtersMatch =
     existing != null &&
@@ -66,6 +67,18 @@ const BotProfileEditorForm = ({ botId }: { botId?: string }) => {
     }
     if (result.ok && !existing?.id) {
       window.setTimeout(() => navigate('/bots'), 400)
+    }
+  }
+
+  const refreshSnapshot = async () => {
+    if (!existing?.id) return
+    setScanning(true)
+    const result = await refreshBotSnapshot(existing.id, universe)
+    setScanning(false)
+    setNotice(result)
+    if (result.ok) {
+      const saved = getBookState().bots.find((bot) => bot.id === existing.id)
+      if (saved) setUniverse(saved.universe)
     }
   }
 
@@ -118,7 +131,12 @@ const BotProfileEditorForm = ({ botId }: { botId?: string }) => {
           helperText={`${UNIVERSE_LIMITS.spreadMin}–${UNIVERSE_LIMITS.spreadMax} bps`}
           onChange={(event) => setUniverse({ ...universe, max_spread_bps: Number(event.target.value) })}
         />
-        <UniversePreview snapshot={snapshot} />
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <Button variant="text" onClick={refreshSnapshot} disabled={!existing || scanning || saving}>
+            {scanning ? 'Scanning…' : 'Refresh snapshot'}
+          </Button>
+        </Box>
+        <UniversePreview snapshot={snapshot} loading={scanning} />
 
         <Typography variant="h6">Risk parameters</Typography>
         <TextField

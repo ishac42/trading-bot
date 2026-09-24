@@ -49,6 +49,8 @@ class TestBotProfiles:
         data = resp.json()
         assert data["name"] == "Test Bot Alpha"
         assert data["status"] == "stopped"
+        assert data["snapshot"]["as_of"]
+        assert data["snapshot"]["members"] == []
         assert data["universe"]["top_n"] == 75
         assert data["risk"]["sleeve_loss_limit_pct"] == -1.5
         assert "capital" not in data

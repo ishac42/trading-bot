@@ -77,6 +77,23 @@ export async function removeBotProfile(id: string, name: string): Promise<BookAc
   }
 }
 
+export async function refreshBotSnapshot(id: string, universe: BotProfileInput['universe']): Promise<BookActionResult> {
+  try {
+    const response = await api.scanBot(id, clampUniverseFilters(universe))
+    const saved = normalize(response.data as BotProfile)
+    applyServerBot(saved)
+    const count = saved.snapshot.members.length
+    return {
+      ok: true,
+      message: count
+        ? `${saved.name} snapshot refreshed with ${count} names.`
+        : `${saved.name} snapshot refreshed. No names passed these filters.`,
+    }
+  } catch (error) {
+    return { ok: false, message: apiErrorMessage(error, 'Could not refresh the snapshot.') }
+  }
+}
+
 export async function setBotProfileRunning(id: string, running: boolean): Promise<BookActionResult> {
   try {
     const response = running ? await api.startBot(id) : await api.stopBot(id)
